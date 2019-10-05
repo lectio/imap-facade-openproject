@@ -10,6 +10,8 @@ import (
 
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/backend"
+
+	"github.com/lectio/imap-facade-openproject/hal"
 )
 
 type Backend struct {
@@ -31,13 +33,16 @@ func (be *Backend) Login(_ *imap.ConnInfo, username, password string) (backend.U
 	if ok {
 		// user already exists check password
 		if user.password == password {
+			log.Printf("--- Login ok: %s", username)
 			return user, nil
 		}
 	}
 	// Haven't seen this user before, or password changed.
 	if user, err := be.checkUserLogin(username, password); err == nil {
+		log.Printf("--- Login ok: %s", username)
 		return user, nil
 	} else {
+		log.Printf("--- Login failed: %v", err)
 		return nil, err
 	}
 
@@ -45,8 +50,19 @@ func (be *Backend) Login(_ *imap.ConnInfo, username, password string) (backend.U
 }
 
 func (be *Backend) checkUserLogin(username, password string) (*User, error) {
-	// TODO: Check login with OpenProject
-	user := NewUser(be, username, password)
+	c := hal.NewHalClient(be.base)
+	c.SetAPIKey(password)
+
+	if res, err := c.Get("/api/v3/my_preferences"); err != nil {
+		return nil, err
+	} else {
+		if resErr := res.IsError(); resErr != nil {
+			return nil, errors.New(resErr.Message)
+		}
+	}
+	// TODO: get user login from '/api/v3/users/{id}'
+
+	user := NewUser(be, c, username, password)
 	be.users[username] = user
 	return user, nil
 }

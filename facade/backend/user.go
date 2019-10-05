@@ -2,15 +2,21 @@ package backend
 
 import (
 	"errors"
+	"fmt"
+	"log"
 	"sync"
 	"time"
 
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/backend"
+
+	"github.com/lectio/imap-facade-openproject/hal"
 )
 
 type User struct {
 	sync.RWMutex
+
+	hal *hal.HalClient
 
 	backend   *Backend
 	username  string
@@ -18,9 +24,10 @@ type User struct {
 	mailboxes map[string]*Mailbox
 }
 
-func NewUser(backend *Backend, username string, password string) *User {
+func NewUser(backend *Backend, hal *hal.HalClient, username string, password string) *User {
 	user := &User{
 		backend:   backend,
+		hal:       hal,
 		username:  username,
 		password:  password,
 		mailboxes: map[string]*Mailbox{},
@@ -29,12 +36,12 @@ func NewUser(backend *Backend, username string, password string) *User {
 	// Message for tests
 	body := "From: contact@example.org\r\n" +
 		"To: contact@example.org\r\n" +
-		"Subject: A little message, just for you\r\n" +
+		"Subject: Welcome new lectio user\r\n" +
 		"Date: Wed, 11 May 2016 14:31:59 +0000\r\n" +
 		"Message-ID: <0000000@localhost/>\r\n" +
 		"Content-Type: text/plain\r\n" +
 		"\r\n" +
-		"Hi there :)"
+		"TODO: add welcome message here. :)"
 
 	user.createMailbox("INBOX", "")
 	inbox := user.mailboxes["INBOX"]
@@ -42,18 +49,51 @@ func NewUser(backend *Backend, username string, password string) *User {
 		{
 			Uid:   6,
 			Date:  time.Now(),
-			Flags: []string{imap.SeenFlag},
+			Flags: []string{},
 			Size:  uint32(len(body)),
 			Body:  []byte(body),
 		},
 	}
-	// TODO: Auto create other mailboxes for the user.
-	//user.createMailbox("Sent", specialuse.Sent)
-	//user.createMailbox("Drafts", specialuse.Drafts)
 	//user.createMailbox("Queue", "")
-	//user.createMailbox("Trash", specialuse.Trash)
 
+	if err := user.updateProjects(); err != nil {
+		log.Printf("Failed to get projects: %v", err)
+	}
 	return user
+}
+
+func (u *User) updateProjects() error {
+	// Get list of projects
+	res, err := u.hal.Get("/api/v3/projects")
+	if err != nil {
+		return errors.New("Failed to get projects")
+	} else {
+		if resErr := res.IsError(); resErr != nil {
+			return errors.New(resErr.Message)
+		}
+	}
+
+	col, ok := res.(*hal.Collection)
+	if !ok {
+		return fmt.Errorf("Invalid resource type: %+v", res)
+	}
+
+	projects := col.Items()
+	for _, res := range projects {
+		proj, ok := res.(*hal.Project)
+		if !ok {
+			return fmt.Errorf("Invalid resource type: %+v", res)
+		}
+		log.Printf("Create Project folder: %v", proj.Name())
+		if mbox, err := u.createMailbox(proj.Name(), ""); mbox == nil {
+			return err
+		} else {
+			// Auto subscribe to project mailboxes
+			mbox.SetSubscribed(true)
+		}
+	}
+
+	return nil
 }
 
 func (u *User) Username() string {
@@ -85,20 +125,22 @@ func (u *User) GetMailbox(name string) (mailbox backend.Mailbox, err error) {
 	return
 }
 
-func (u *User) createMailbox(name string, specialUse string) error {
-	if _, ok := u.mailboxes[name]; ok {
-		return errors.New("Mailbox already exists")
+func (u *User) createMailbox(name string, specialUse string) (mailbox backend.Mailbox, err error) {
+	if mbox, ok := u.mailboxes[name]; ok {
+		return mbox, errors.New("Mailbox already exists")
 	}
 
-	u.mailboxes[name] = NewMailbox(u, name, specialUse)
-	return nil
+	mbox := NewMailbox(u, name, specialUse)
+	u.mailboxes[name] = mbox
+	return mbox, nil
 }
 
 func (u *User) CreateMailbox(name string) error {
 	u.Lock()
 	defer u.Unlock()
 
-	return u.createMailbox(name, "")
+	_, err := u.createMailbox(name, "")
+	return err
 }
 
 func (u *User) DeleteMailbox(name string) error {
