@@ -1,0 +1,7 @@
+
+[openprojects]
+base = "https://community.openproject.com/"
+
+[imap]
+address = "0.0.0.0:2143"
+
