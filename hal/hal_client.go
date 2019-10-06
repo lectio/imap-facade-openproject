@@ -1,6 +1,8 @@
 package hal
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 )
 
@@ -53,4 +55,25 @@ func (c *HalClient) Get(path string) (Resource, error) {
 	}
 
 	return c.doRequest(req)
+}
+
+func (c *HalClient) GetCollection(path string) (*Collection, error) {
+	res, err := c.Get(path)
+	if err != nil {
+		return nil, err
+	}
+
+	col, ok := res.(*Collection)
+	if !ok {
+		return nil, fmt.Errorf("Invalid resource type: %s", res.ResourceType())
+	}
+
+	return col, nil
+}
+
+func (c *HalClient) LinkGet(link *Link) (Resource, error) {
+	if link == nil {
+		return nil, errors.New("nil Link")
+	}
+	return c.Get(link.Href)
 }

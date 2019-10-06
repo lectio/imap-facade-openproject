@@ -1,5 +1,9 @@
 package hal
 
+import (
+	"fmt"
+)
+
 //
 // Collection
 //
@@ -8,33 +12,60 @@ type Collection struct {
 	ResourceObject
 }
 
-func NewCollection() *Collection {
+func newCollection(typeName string) *Collection {
 	return &Collection{
 		ResourceObject{
-			Type: "Collection",
+			Type: typeName,
 		},
 	}
 }
 
-func (res *Project) Total() int {
-	return res.getInt("total")
+func NewCollection() *Collection {
+	return newCollection("Collection")
 }
 
-func (res *Project) Count() int {
-	return res.getInt("count")
+func (res *Collection) Total() int {
+	return res.GetInt("total")
+}
+
+func (res *Collection) Count() int {
+	return res.GetInt("count")
+}
+
+func (res *Collection) IsPaginated() bool {
+	return res.HasField("pageSize")
+}
+
+func (res *Collection) getPage(c *HalClient, name string) (*Collection, error) {
+	linkRes, err := res.GetLinkResource(c, name)
+	if err != nil {
+		return nil, err
+	}
+	// Make sure it is a Collection
+	if col, ok := linkRes.(*Collection); ok {
+		return col, nil
+	}
+	return nil, fmt.Errorf("Unknown resource type: %s", linkRes.ResourceType())
+}
+
+func (res *Collection) NextPage(c *HalClient) (*Collection, error) {
+	return res.getPage(c, "nextByOffset")
+}
+
+func (res *Collection) PrevPage(c *HalClient) (*Collection, error) {
+	return res.getPage(c, "previousByOffset")
 }
 
 func (res *Collection) Items() []Resource {
-	items, ok := res.Embedded["elements"]
-	if ok {
-		return items
-	}
-	return nil
+	return res.GetEmbeddedResourceList("elements")
 }
 
 // Register Resource Factories
 func init() {
 	resourceTypes["Collection"] = func() Resource {
 		return NewCollection()
+	}
+	resourceTypes["WorkPackageCollection"] = func() Resource {
+		return newCollection("WorkPackageCollection")
 	}
 }

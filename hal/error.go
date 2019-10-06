@@ -2,6 +2,7 @@ package hal
 
 import (
 	"encoding/json"
+	"fmt"
 )
 
 //
@@ -13,15 +14,24 @@ type Error struct {
 	Message         string `json:"message"`
 }
 
+// Golang Error interface
+func (res *Error) Error() string {
+	return fmt.Sprintf("%s: %s", res.ErrorIdentifier, res.Message)
+}
+
 func (res *Error) ResourceType() string {
 	return "Error"
+}
+
+func (res *Error) GetLink(string) *Link {
+	return nil
 }
 
 func (res *Error) IsError() *Error {
 	return res
 }
 
-func (res *Error) Decode(mData map[string]json.RawMessage) error {
+func (res *Error) decodeHAL(mData map[string]json.RawMessage) error {
 	for key, val := range mData {
 		switch key {
 		case "errorIdentifier":

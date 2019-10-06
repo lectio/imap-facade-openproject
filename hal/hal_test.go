@@ -39,8 +39,8 @@ func TestCollection_Unmarshal(t *testing.T) {
 	}
 	log.Printf("Collection = %+v", col)
 	// Get Embedded projects
-	projects, ok := col.Embedded["elements"]
-	if !ok {
+	projects := col.Items()
+	if projects == nil {
 		t.Errorf("Collection missing 'elements'.")
 	}
 	if len(projects) != 1 {
