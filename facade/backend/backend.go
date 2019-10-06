@@ -11,7 +11,7 @@ import (
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/backend"
 
-	"github.com/lectio/imap-facade-openproject/hal"
+	hal "github.com/lectio/go-json-hal"
 )
 
 type Backend struct {

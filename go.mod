@@ -12,6 +12,7 @@ require (
 	github.com/emersion/go-imap-specialuse v0.0.0-20161227184202-ba031ced6a62
 	github.com/emersion/go-imap-unselect v0.0.0-20171113212723-b985794e5f26
 	github.com/emersion/go-message v0.10.7
+	github.com/lectio/go-json-hal v0.0.0-20191006194558-e2068265fc05
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/viper v1.4.0
 )
