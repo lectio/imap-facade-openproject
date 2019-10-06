@@ -67,49 +67,7 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 	}
 	//user.createMailbox("Queue", "")
 
-	if err := user.updateProjects(); err != nil {
-		log.Printf("Failed to get projects: %v", err)
-	}
 	return user
-}
-
-func (u *User) workPackageToMessage(mbox *Mailbox, w *hal.WorkPackage) error {
-	// Message for tests
-	body := "From: contact@example.org\r\n" +
-		"To: " + u.user.Name() + " <" + u.email + ">\r\n" +
-		"Date: Wed, 11 May 2016 14:31:59 +0000\r\n" +
-		"Message-ID: <0000000@localhost/>\r\n" +
-		"Content-Type: text/plain\r\n" +
-		"Subject: " + w.Subject() + "\r\n" +
-		"\r\n"
-
-	desc := w.Description()
-	if desc != nil {
-		body += desc.Raw
-	}
-
-	msg := &Message{
-		Date:  time.Now(),
-		Flags: []string{},
-		Size:  uint32(len(body)),
-		Body:  []byte(body),
-	}
-	mbox.appendMessage(msg)
-	return nil
-}
-
-func (u *User) createWorkPackages(mbox *Mailbox, col *hal.Collection) error {
-	for _, itemRes := range col.Items() {
-		work, ok := itemRes.(*hal.WorkPackage)
-		if !ok {
-			return fmt.Errorf("Invalid resource type: %s", itemRes.ResourceType())
-		}
-		log.Printf("-- Create message for Work Package: %s", work.Subject())
-		if err := u.workPackageToMessage(mbox, work); err != nil {
-			log.Printf("--- Failed to create message from work package: %s", work.Subject())
-		}
-	}
-	return nil
 }
 
 func (u *User) updateProjects() error {
@@ -124,23 +82,17 @@ func (u *User) updateProjects() error {
 		if !ok {
 			return fmt.Errorf("Invalid resource type: %s", itemRes.ResourceType())
 		}
+		name := proj.Name()
+		// Check if mailbox already exists
+		if _, ok := u.mailboxes[name]; ok {
+			continue
+		}
 		// Create IMAP mailbox for Project
-		log.Printf("Create Project folder: %v", proj.Name())
-		mbox, err := u.createMailbox(proj.Name(), "")
-		if err != nil {
-			return err
-		} else {
-			// Auto subscribe to project mailboxes
-			mbox.SetSubscribed(true)
-		}
-		// Get work package
-		work, err := proj.GetWorkPackages(u.hal)
-		if err != nil {
-			return err
-		}
-		if err := u.createWorkPackages(mbox, work); err != nil {
-			return err
-		}
+		log.Printf("Create Project folder: %v", name)
+		mbox := NewProjectMailbox(u, proj)
+		u.mailboxes[name] = mbox
+		// Auto subscribe to project mailboxes
+		mbox.SetSubscribed(true)
 	}
 
 	return nil
@@ -153,6 +105,11 @@ func (u *User) Username() string {
 func (u *User) ListMailboxes(subscribed bool) (mailboxes []backend.Mailbox, err error) {
 	u.RLock()
 	defer u.RUnlock()
+
+	// Update project mailboxes
+	if err := u.updateProjects(); err != nil {
+		log.Printf("Failed to get projects: %v", err)
+	}
 
 	for _, mailbox := range u.mailboxes {
 		if subscribed && !mailbox.Subscribed {
