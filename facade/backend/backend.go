@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/viper"
 
-	"github.com/Neopallium/go-imap"
-	"github.com/Neopallium/go-imap/backend"
+	"github.com/emersion/go-imap"
+	"github.com/emersion/go-imap/backend"
 
 	"github.com/lectio/imap-facade-openproject/hal"
 )

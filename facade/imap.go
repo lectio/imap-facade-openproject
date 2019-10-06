@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	"github.com/Neopallium/go-imap/server"
+	"github.com/emersion/go-imap/server"
 
 	id "github.com/ProtonMail/go-imap-id"
 	idle "github.com/emersion/go-imap-idle"

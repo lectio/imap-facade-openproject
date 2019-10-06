@@ -6,8 +6,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/Neopallium/go-imap"
-	"github.com/Neopallium/go-imap/backend/backendutil"
+	"github.com/emersion/go-imap"
+	"github.com/emersion/go-imap/backend/backendutil"
 	"github.com/emersion/go-message"
 	"github.com/emersion/go-message/textproto"
 )
