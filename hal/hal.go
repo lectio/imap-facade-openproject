@@ -75,9 +75,15 @@ func (res *ResourceObject) GetString(field string) string {
 }
 
 func (res *ResourceObject) GetInt(field string) int {
-	if val, ok := res.fields[field]; ok {
-		if n, ok := val.(int); ok {
+	val, ok := res.fields[field]
+	if ok {
+		switch n := val.(type) {
+		case int:
 			return n
+		case float64:
+			return int(n)
+		case float32:
+			return int(n)
 		}
 	}
 	return 0

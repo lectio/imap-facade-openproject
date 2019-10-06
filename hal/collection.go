@@ -36,6 +36,14 @@ func (res *Collection) IsPaginated() bool {
 	return res.HasField("pageSize")
 }
 
+func (res *Collection) PageSize() int {
+	return res.GetInt("pageSize")
+}
+
+func (res *Collection) Offset() int {
+	return res.GetInt("offset")
+}
+
 func (res *Collection) getPage(c *HalClient, name string) (*Collection, error) {
 	linkRes, err := res.GetLinkResource(c, name)
 	if err != nil {
