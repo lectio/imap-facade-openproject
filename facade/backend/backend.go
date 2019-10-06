@@ -43,7 +43,6 @@ func (be *Backend) Login(_ *imap.ConnInfo, username, password string) (backend.U
 		return user, nil
 	} else {
 		log.Printf("--- Login failed: %v", err)
-		return nil, err
 	}
 
 	return nil, errors.New("Bad username or password")
@@ -53,16 +52,25 @@ func (be *Backend) checkUserLogin(username, password string) (*User, error) {
 	c := hal.NewHalClient(be.base)
 	c.SetAPIKey(password)
 
-	if res, err := c.Get("/api/v3/my_preferences"); err != nil {
+	res, err := c.Get("/api/v3/my_preferences")
+	if err != nil {
 		return nil, err
-	} else {
-		if resErr := res.IsError(); resErr != nil {
-			return nil, errors.New(resErr.Message)
-		}
 	}
-	// TODO: get user login from '/api/v3/users/{id}'
 
-	user := NewUser(be, c, username, password)
+	prefs, ok := res.(*hal.UserPreferences)
+	if !ok {
+		return nil, errors.New("Failed to load user preferences.")
+	}
+	userRes, err := prefs.GetUser(c)
+	if err != nil {
+		return nil, errors.New("Failed to load user details.")
+	}
+	// Got user details.  Check username.
+	if username != userRes.Login() {
+		return nil, errors.New("IMAP Username doesn't match OpenProject login.")
+	}
+
+	user := NewUser(be, c, userRes, password)
 	be.users[username] = user
 	return user, nil
 }

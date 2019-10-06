@@ -202,6 +202,11 @@ func (mbox *Mailbox) SearchMessages(uid bool, criteria *imap.SearchCriteria) ([]
 	return ids, nil
 }
 
+func (mbox *Mailbox) appendMessage(msg *Message) {
+	msg.Uid = mbox.uidNext()
+	mbox.Messages = append(mbox.Messages, msg)
+}
+
 func (mbox *Mailbox) CreateMessage(flags []string, date time.Time, body imap.Literal) error {
 	mbox.Lock()
 	defer mbox.Unlock()
@@ -215,8 +220,7 @@ func (mbox *Mailbox) CreateMessage(flags []string, date time.Time, body imap.Lit
 		return err
 	}
 
-	mbox.Messages = append(mbox.Messages, &Message{
-		Uid:   mbox.uidNext(),
+	mbox.appendMessage(&Message{
 		Date:  date,
 		Size:  uint32(len(b)),
 		Flags: append(flags, imap.RecentFlag),

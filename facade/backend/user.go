@@ -20,28 +20,39 @@ type User struct {
 
 	backend   *Backend
 	username  string
-	password  string
+	password  string // Cached password for faster sync
+	email     string
 	mailboxes map[string]*Mailbox
+
+	user *hal.User
 }
 
-func NewUser(backend *Backend, hal *hal.HalClient, username string, password string) *User {
+func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password string) *User {
+	email := userRes.Email()
+	if email == "" {
+		email = userRes.Login()
+	}
+
 	user := &User{
 		backend:   backend,
 		hal:       hal,
-		username:  username,
+		user:      userRes,
+		username:  userRes.Login(),
 		password:  password,
+		email:     email,
 		mailboxes: map[string]*Mailbox{},
 	}
 
 	// Message for tests
 	body := "From: contact@example.org\r\n" +
-		"To: contact@example.org\r\n" +
+		"To: " + userRes.Name() + " <" + email + ">\r\n" +
 		"Subject: Welcome new lectio user\r\n" +
 		"Date: Wed, 11 May 2016 14:31:59 +0000\r\n" +
 		"Message-ID: <0000000@localhost/>\r\n" +
 		"Content-Type: text/plain\r\n" +
 		"\r\n" +
-		"TODO: add welcome message here. :)"
+		"Hi " + userRes.Name() + ",\r\n" +
+		"Welcome to the lectio IMAP facade for OpenProjects."
 
 	user.createMailbox("INBOX", "")
 	inbox := user.mailboxes["INBOX"]
@@ -62,34 +73,73 @@ func NewUser(backend *Backend, hal *hal.HalClient, username string, password str
 	return user
 }
 
+func (u *User) workPackageToMessage(mbox *Mailbox, w *hal.WorkPackage) error {
+	// Message for tests
+	body := "From: contact@example.org\r\n" +
+		"To: " + u.user.Name() + " <" + u.email + ">\r\n" +
+		"Date: Wed, 11 May 2016 14:31:59 +0000\r\n" +
+		"Message-ID: <0000000@localhost/>\r\n" +
+		"Content-Type: text/plain\r\n" +
+		"Subject: " + w.Subject() + "\r\n" +
+		"\r\n"
+
+	desc := w.Description()
+	if desc != nil {
+		body += desc.Raw
+	}
+
+	msg := &Message{
+		Date:  time.Now(),
+		Flags: []string{},
+		Size:  uint32(len(body)),
+		Body:  []byte(body),
+	}
+	mbox.appendMessage(msg)
+	return nil
+}
+
+func (u *User) createWorkPackages(mbox *Mailbox, col *hal.Collection) error {
+	for _, itemRes := range col.Items() {
+		work, ok := itemRes.(*hal.WorkPackage)
+		if !ok {
+			return fmt.Errorf("Invalid resource type: %s", itemRes.ResourceType())
+		}
+		log.Printf("-- Create message for Work Package: %s", work.Subject())
+		if err := u.workPackageToMessage(mbox, work); err != nil {
+			log.Printf("--- Failed to create message from work package: %s", work.Subject())
+		}
+	}
+	return nil
+}
+
 func (u *User) updateProjects() error {
 	// Get list of projects
-	res, err := u.hal.Get("/api/v3/projects")
+	col, err := u.hal.GetCollection("/api/v3/projects")
 	if err != nil {
-		return errors.New("Failed to get projects")
-	} else {
-		if resErr := res.IsError(); resErr != nil {
-			return errors.New(resErr.Message)
-		}
+		return fmt.Errorf("Failed to get projects: %s", err)
 	}
 
-	col, ok := res.(*hal.Collection)
-	if !ok {
-		return fmt.Errorf("Invalid resource type: %+v", res)
-	}
-
-	projects := col.Items()
-	for _, res := range projects {
-		proj, ok := res.(*hal.Project)
+	for _, itemRes := range col.Items() {
+		proj, ok := itemRes.(*hal.Project)
 		if !ok {
-			return fmt.Errorf("Invalid resource type: %+v", res)
+			return fmt.Errorf("Invalid resource type: %s", itemRes.ResourceType())
 		}
+		// Create IMAP mailbox for Project
 		log.Printf("Create Project folder: %v", proj.Name())
-		if mbox, err := u.createMailbox(proj.Name(), ""); mbox == nil {
+		mbox, err := u.createMailbox(proj.Name(), "")
+		if err != nil {
 			return err
 		} else {
 			// Auto subscribe to project mailboxes
 			mbox.SetSubscribed(true)
+		}
+		// Get work package
+		work, err := proj.GetWorkPackages(u.hal)
+		if err != nil {
+			return err
+		}
+		if err := u.createWorkPackages(mbox, work); err != nil {
+			return err
 		}
 	}
 
@@ -125,7 +175,7 @@ func (u *User) GetMailbox(name string) (mailbox backend.Mailbox, err error) {
 	return
 }
 
-func (u *User) createMailbox(name string, specialUse string) (mailbox backend.Mailbox, err error) {
+func (u *User) createMailbox(name string, specialUse string) (mailbox *Mailbox, err error) {
 	if mbox, ok := u.mailboxes[name]; ok {
 		return mbox, errors.New("Mailbox already exists")
 	}
