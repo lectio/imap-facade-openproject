@@ -3,10 +3,8 @@ TODO
 
 ### Required
 
-* Letsencrypt support (autocerts).
 * BoltDB for caching messages and per-user flags.
-* Generate full messages (text, html and attachments)
-* Create Docker file.
+* Add attachments to messages.
 
 ### Optional?
 * Cache work packages.  Don't re-download for each user.
