@@ -55,7 +55,8 @@ func NewMailbox(user *User, name string, specialUse string) *Mailbox {
 			imap.DraftFlag,
 			"nonjunk",
 		},
-		workMap: make(map[int]*Message),
+		workMap:    make(map[int]*Message),
+		nextUpdate: time.Now().Add(time.Second * -1),
 	}
 	if specialUse != "" {
 		mbox.Attributes = []string{specialUse}

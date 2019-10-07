@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/backend"
@@ -24,6 +25,8 @@ type User struct {
 	mailboxes map[string]*Mailbox
 
 	user *hal.User
+
+	nextUpdate time.Time
 }
 
 func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password string) *User {
@@ -33,13 +36,14 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 	}
 
 	user := &User{
-		backend:   backend,
-		hal:       hal,
-		user:      userRes,
-		username:  userRes.Login(),
-		password:  password,
-		email:     email,
-		mailboxes: map[string]*Mailbox{},
+		backend:    backend,
+		hal:        hal,
+		user:       userRes,
+		username:   userRes.Login(),
+		password:   password,
+		email:      email,
+		mailboxes:  map[string]*Mailbox{},
+		nextUpdate: time.Now().Add(time.Second * -1),
 	}
 
 	// Message for tests
@@ -55,10 +59,20 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 	inbox := user.mailboxes["INBOX"]
 	inbox.appendMessage(msg)
 
+	// Update project mailboxes
+	if err := user.updateProjects(); err != nil {
+		log.Printf("Failed to get projects: %v", err)
+	}
+
 	return user
 }
 
 func (u *User) updateProjects() error {
+	// Only check for new projects every 30 seconds.
+	if u.nextUpdate.After(time.Now()) {
+		// Skip update
+		return nil
+	}
 	// Get list of projects
 	col, err := u.hal.GetCollection("/api/v3/projects")
 	if err != nil {
@@ -83,6 +97,8 @@ func (u *User) updateProjects() error {
 		mbox.SetSubscribed(true)
 	}
 
+	// Schedule next update 30 seconds.
+	u.nextUpdate = time.Now().Add(time.Second * 30)
 	return nil
 }
 
