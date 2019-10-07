@@ -41,6 +41,9 @@ func NewFacade(cfgIMAP *viper.Viper, cfgOP *viper.Viper) (*ImapFacade, error) {
 	s.Enable(unselect.NewExtension())
 
 	s.Addr = addr
+	if tlsEnabled {
+		s.TLSConfig = tlsConfig
+	}
 	// Since we will use this server for testing only, we can allow plain text
 	// authentication over unencrypted connections
 	s.AllowInsecureAuth = true
@@ -55,7 +58,13 @@ func (g *ImapFacade) Close() {
 
 func (g *ImapFacade) Run() {
 	log.Println("Starting IMAP server at:", g.server.Addr)
-	if err := g.server.ListenAndServe(); err != nil {
+	var err error
+	if tlsEnabled {
+		err = g.server.ListenAndServeTLS()
+	} else {
+		err = g.server.ListenAndServe()
+	}
+	if err != nil {
 		log.Fatal(err)
 	}
 }

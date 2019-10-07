@@ -15,6 +15,10 @@ var runCmd = &cobra.Command{
 	Short: "Run IMAP facade",
 	Long:  `Start the IMAP facade`,
 	Run: func(cmd *cobra.Command, args []string) {
+		cfgTLS := viper.Sub("tls")
+		if cfgTLS != nil {
+			facade.InitTLS(cfgTLS)
+		}
 		cfgOP := viper.Sub("openprojects")
 		if cfgOP == nil {
 			log.Fatal("Missing 'openprojects'")

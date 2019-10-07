@@ -15,4 +15,5 @@ require (
 	github.com/lectio/go-json-hal v0.0.0-20191006194558-e2068265fc05
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/viper v1.4.0
+	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
 )

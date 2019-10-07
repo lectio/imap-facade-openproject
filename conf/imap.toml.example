@@ -2,6 +2,14 @@
 [openprojects]
 base = "https://community.openproject.com/"
 
+[tls]
+enabled = true
+mode = "autocert"
+#address = ":8080"
+address = ":http"
+hosts = [ "imap.example.com", "example.com" ]
+path = "certs"
+
 [imap]
 address = "0.0.0.0:2143"
 
