@@ -45,11 +45,11 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 	// Message for tests
 	body := "Hi " + userRes.Name() + ",\r\n" +
 		"Welcome to the lectio IMAP facade for OpenProjects."
-	html := "<html><head></head><body>" + body + " HTML Part</body></html>"
+	html := "<html><head></head><body>" + body + "</body></html>"
 
 	msg, _ := buildSimpleMessage("contact@example.org",
 		userRes.Name()+" <"+email+">",
-		"Welcome new lectio user jordan-wright/email", body, html)
+		"Welcome new lectio user", body, html)
 
 	user.createMailbox("INBOX", "")
 	inbox := user.mailboxes["INBOX"]
