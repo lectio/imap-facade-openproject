@@ -174,16 +174,14 @@ func (u *User) RenameMailbox(existingName, newName string) error {
 		return errors.New("No such mailbox")
 	}
 
-	u.mailboxes[newName] = &Mailbox{
-		name:     newName,
-		Messages: mbox.Messages,
-		user:     u,
-	}
+	// Move mailbox to new name.
+	mbox.name = newName
+	u.mailboxes[newName] = mbox
+	delete(u.mailboxes, existingName)
 
-	mbox.Messages = nil
-
-	if existingName != "INBOX" {
-		delete(u.mailboxes, existingName)
+	if existingName == "INBOX" {
+		// Create a new INBOX
+		u.createMailbox("INBOX", "")
 	}
 
 	return nil
