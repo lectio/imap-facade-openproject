@@ -198,6 +198,7 @@ func (u *User) PushMailboxUpdate(mbox *Mailbox) {
 		u.backend.PushUpdate(update)
 	} else {
 		// Failed to get current mailbox status.
+		log.Printf("Failed push mailbox update: %s", err)
 	}
 }
 

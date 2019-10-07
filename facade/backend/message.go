@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"log"
 	"time"
 
 	"github.com/emersion/go-imap"
@@ -21,12 +22,19 @@ type Message struct {
 }
 
 func (m *Message) entity() (*message.Entity, error) {
-	return message.Read(bytes.NewReader(m.Body))
+	ent, err := message.Read(bytes.NewReader(m.Body))
+	if err != nil {
+		log.Printf("Failed decode message body: %s", err)
+	}
+	return ent, err
 }
 
 func (m *Message) headerAndBody() (textproto.Header, io.Reader, error) {
 	body := bufio.NewReader(bytes.NewReader(m.Body))
 	hdr, err := textproto.ReadHeader(body)
+	if err != nil {
+		log.Printf("Failed decode message headers and body: %s", err)
+	}
 	return hdr, body, err
 }
 
@@ -40,6 +48,7 @@ func (m *Message) Fetch(seqNum uint32, items []imap.FetchItem) (*imap.Message, e
 				return nil, err
 			}
 			if envelope, err := backendutil.FetchEnvelope(hdr); err != nil {
+				log.Printf("BackendUtil: Failed to fetch message envelopelope: %s", err)
 				return nil, err
 			} else {
 				fetched.Envelope = envelope
@@ -50,6 +59,7 @@ func (m *Message) Fetch(seqNum uint32, items []imap.FetchItem) (*imap.Message, e
 				return nil, err
 			}
 			if body, err := backendutil.FetchBodyStructure(hdr, body, item == imap.FetchBodyStructure); err != nil {
+				log.Printf("BackendUtil: Failed to fetch message body structure: %s", err)
 				return nil, err
 			} else {
 				fetched.BodyStructure = body
@@ -67,16 +77,21 @@ func (m *Message) Fetch(seqNum uint32, items []imap.FetchItem) (*imap.Message, e
 		default:
 			section, err := imap.ParseBodySectionName(item)
 			if err != nil {
+				log.Printf("Fetch: Unknown body section name %v: %s", item, err)
 				break
 			}
 
 			body := bufio.NewReader(bytes.NewReader(m.Body))
 			hdr, err := textproto.ReadHeader(body)
 			if err != nil {
+				log.Printf("Fetch: Failed to decode headers & body: %s", err)
 				return nil, err
 			}
 
-			l, _ := backendutil.FetchBodySection(hdr, body, section)
+			l, err := backendutil.FetchBodySection(hdr, body, section)
+			if err != nil {
+				log.Printf("Fetch: failed to fetch body section: %s", err)
+			}
 			fetched.Body[section] = l
 		}
 	}
@@ -85,6 +100,9 @@ func (m *Message) Fetch(seqNum uint32, items []imap.FetchItem) (*imap.Message, e
 }
 
 func (m *Message) Match(seqNum uint32, c *imap.SearchCriteria) (bool, error) {
-	e, _ := m.entity()
+	e, err := m.entity()
+	if err != nil {
+		return false, err
+	}
 	return backendutil.Match(e, seqNum, m.Uid, m.Date, m.Flags, c)
 }
