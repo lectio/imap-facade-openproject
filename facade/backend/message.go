@@ -11,6 +11,8 @@ import (
 	"github.com/emersion/go-imap/backend/backendutil"
 	"github.com/emersion/go-message"
 	"github.com/emersion/go-message/textproto"
+
+	"github.com/jordan-wright/email"
 )
 
 type Message struct {
@@ -19,6 +21,29 @@ type Message struct {
 	Size  uint32
 	Flags []string
 	Body  []byte
+}
+
+func buildSimpleMessage(from, to, subject, text, html string) (*Message, error) {
+	e := email.NewEmail()
+	e.From = from
+	e.To = []string{to}
+	e.Subject = subject
+	e.Text = []byte(text)
+	e.HTML = []byte(html)
+
+	buf, err := e.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	msg := &Message{
+		Uid:   1,
+		Date:  time.Now(),
+		Flags: []string{},
+		Size:  uint32(len(buf)),
+		Body:  buf,
+	}
+
+	return msg, nil
 }
 
 func (m *Message) entity() (*message.Entity, error) {

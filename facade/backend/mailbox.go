@@ -14,6 +14,13 @@ import (
 	hal "github.com/lectio/go-json-hal"
 )
 
+const (
+	htmlHeader = `<html>
+	<head></head>
+	<body>`
+	htmlFooter = `</body></html>`
+)
+
 var Delimiter = "/"
 
 type Mailbox struct {
@@ -72,26 +79,24 @@ func (mbox *Mailbox) workPackageToMessage(w *hal.WorkPackage) error {
 
 	log.Printf("-- Create message for Work Package: %s", w.Subject())
 	u := mbox.user
-	// Message for tests
-	body := "From: contact@example.org\r\n" +
-		"To: " + u.user.Name() + " <" + u.email + ">\r\n" +
-		"Date: Wed, 11 May 2016 14:31:59 +0000\r\n" +
-		"Message-ID: <0000000@localhost/>\r\n" +
-		"Content-Type: text/plain\r\n" +
-		"Subject: " + w.Subject() + "\r\n" +
-		"\r\n"
 
+	// Get Work package text & html parts
+	var text, html string
 	desc := w.Description()
 	if desc != nil {
-		body += desc.Raw
+		text = desc.Raw
+		html = htmlHeader + desc.Html + htmlFooter
 	}
 
-	msg := &Message{
-		Date:  time.Now(),
-		Flags: []string{},
-		Size:  uint32(len(body)),
-		Body:  []byte(body),
+	// Build message
+	msg, err := buildSimpleMessage("contact@example.org",
+		u.user.Name()+" <"+u.email+">", w.Subject(), text, html)
+	if err != nil {
+		log.Printf("Failed to build message: subject=%s, err=%s", w.Subject(), err)
+		return err
 	}
+
+	// Add message to mailbox
 	mbox.appendMessage(msg)
 
 	// map work package to message

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"time"
 
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/backend"
@@ -44,28 +43,17 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 	}
 
 	// Message for tests
-	body := "From: contact@example.org\r\n" +
-		"To: " + userRes.Name() + " <" + email + ">\r\n" +
-		"Subject: Welcome new lectio user\r\n" +
-		"Date: Wed, 11 May 2016 14:31:59 +0000\r\n" +
-		"Message-ID: <0000000@localhost/>\r\n" +
-		"Content-Type: text/plain\r\n" +
-		"\r\n" +
-		"Hi " + userRes.Name() + ",\r\n" +
+	body := "Hi " + userRes.Name() + ",\r\n" +
 		"Welcome to the lectio IMAP facade for OpenProjects."
+	html := "<html><head></head><body>" + body + " HTML Part</body></html>"
+
+	msg, _ := buildSimpleMessage("contact@example.org",
+		userRes.Name()+" <"+email+">",
+		"Welcome new lectio user jordan-wright/email", body, html)
 
 	user.createMailbox("INBOX", "")
 	inbox := user.mailboxes["INBOX"]
-	inbox.Messages = []*Message{
-		{
-			Uid:   6,
-			Date:  time.Now(),
-			Flags: []string{},
-			Size:  uint32(len(body)),
-			Body:  []byte(body),
-		},
-	}
-	//user.createMailbox("Queue", "")
+	inbox.appendMessage(msg)
 
 	return user
 }
