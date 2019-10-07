@@ -22,7 +22,21 @@ Make sure to change the `base` variable to your OpenProject URL.
     go build main.go
     ./main run
 
+Or with docker
+
+    # build docker image
+    docker build -t imap-facade-openproject:v1 .
+		# run with docker-compose
+		docker-compose up
+
 #### Connect with IMAP client
 
 Use your OpenProject API Key as the password when setting up the IMAP client.
+
+## Docker
+
+#### Download
+
+    git clone https://github.com/lectio/imap-facade-openproject.git
+
 

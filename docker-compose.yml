@@ -1,0 +1,11 @@
+version: '3'
+services:
+  imap-facade-openproject:
+    image: imap-facade-openproject:v1
+    volumes:
+      - ./certs:/app/certs
+      - ./conf:/app/conf
+    ports:
+     - 8443:443
+     - 2143:2143
+
