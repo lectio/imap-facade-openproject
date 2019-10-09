@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"fmt"
 	"io/ioutil"
 	"log"
 	"sync"
@@ -38,8 +37,6 @@ type Mailbox struct {
 	project *hal.Project
 	// Map WorkPackage ID to message
 	workMap map[int]*Message
-
-	nextUpdate time.Time
 }
 
 func NewMailbox(user *User, name string, specialUse string) *Mailbox {
@@ -55,8 +52,7 @@ func NewMailbox(user *User, name string, specialUse string) *Mailbox {
 			imap.DraftFlag,
 			"nonjunk",
 		},
-		workMap:    make(map[int]*Message),
-		nextUpdate: time.Now().Add(time.Second * -1),
+		workMap: make(map[int]*Message),
 	}
 	if specialUse != "" {
 		mbox.Attributes = []string{specialUse}
@@ -105,46 +101,50 @@ func (mbox *Mailbox) workPackageToMessage(w *hal.WorkPackage) error {
 	return nil
 }
 
-func (mbox *Mailbox) createWorkPackages(col *hal.Collection) error {
+func (mbox *Mailbox) createWorkPackages(c *hal.HalClient, col *hal.Collection) error {
+	// We only Lock after we got a page of work packages, to minimize the lock time.
+	mbox.Lock()
 	log.Printf("-- Load work packages from page: %d", col.Offset())
 	for _, itemRes := range col.Items() {
 		work, ok := itemRes.(*hal.WorkPackage)
 		if !ok {
-			return fmt.Errorf("Invalid resource type: %s", itemRes.ResourceType())
+			log.Printf("Invalid resource type: %s", itemRes.ResourceType())
+			continue
 		}
 		if err := mbox.workPackageToMessage(work); err != nil {
 			log.Printf("--- Failed to create message from work package: %s", work.Subject())
 		}
 	}
+	// Finished this page.  Unlock until we have the next page.
+	mbox.Unlock()
+
 	// Check for next page.
 	if col.IsPaginated() {
-		if nextCol, err := col.NextPage(mbox.user.hal); err == nil {
-			return mbox.createWorkPackages(nextCol)
+		if nextCol, err := col.NextPage(c); err == nil {
+			return mbox.createWorkPackages(c, nextCol)
 		}
 	}
 	return nil
 }
 
-func (mbox *Mailbox) updateWorkPackages() error {
+func (mbox *Mailbox) runUpdate(c *hal.HalClient) {
+	// Update work packages
+	mbox.updateWorkPackages(c)
+}
+
+func (mbox *Mailbox) updateWorkPackages(c *hal.HalClient) error {
 	if mbox.project == nil {
 		// Not a project folder.
 		return nil
 	}
-	// Only check for new work packages every 30 seconds.
-	if mbox.nextUpdate.After(time.Now()) {
-		// Skip update
-		return nil
-	}
 	// Get work package
-	col, err := mbox.project.GetWorkPackages(mbox.user.hal)
+	col, err := mbox.project.GetWorkPackages(c)
 	if err != nil {
 		return err
 	}
-	if err := mbox.createWorkPackages(col); err != nil {
+	if err := mbox.createWorkPackages(c, col); err != nil {
 		return err
 	}
-	// Schedule next update 30 seconds.
-	mbox.nextUpdate = time.Now().Add(time.Second * 30)
 	log.Printf("------------- Finished loading work packages.")
 	return nil
 }
@@ -205,9 +205,6 @@ func (mbox *Mailbox) getMsgStats() messageStats {
 }
 
 func (mbox *Mailbox) status(items []imap.StatusItem, flags bool) (*imap.MailboxStatus, error) {
-	// Update work packages
-	mbox.updateWorkPackages()
-
 	status := imap.NewMailboxStatus(mbox.name, items)
 	if flags {
 		// Copy flags slice (don't re-use slice)

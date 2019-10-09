@@ -25,8 +25,6 @@ type User struct {
 	mailboxes map[string]*Mailbox
 
 	user *hal.User
-
-	nextUpdate time.Time
 }
 
 func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password string) *User {
@@ -36,14 +34,13 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 	}
 
 	user := &User{
-		backend:    backend,
-		hal:        hal,
-		user:       userRes,
-		username:   userRes.Login(),
-		password:   password,
-		email:      email,
-		mailboxes:  map[string]*Mailbox{},
-		nextUpdate: time.Now().Add(time.Second * -1),
+		backend:   backend,
+		hal:       hal,
+		user:      userRes,
+		username:  userRes.Login(),
+		password:  password,
+		email:     email,
+		mailboxes: map[string]*Mailbox{},
 	}
 
 	// Message for tests
@@ -59,46 +56,84 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 	inbox := user.mailboxes["INBOX"]
 	inbox.appendMessage(msg)
 
-	// Update project mailboxes
-	if err := user.updateProjects(); err != nil {
-		log.Printf("Failed to get projects: %v", err)
-	}
+	// Initial update
+	user.runUpdate(true)
+
+	// Start background updater
+	go user.updater()
 
 	return user
 }
 
-func (u *User) updateProjects() error {
-	// Only check for new projects every 30 seconds.
-	if u.nextUpdate.After(time.Now()) {
-		// Skip update
-		return nil
+func (u *User) updater() {
+	log.Println("User updater: started.")
+
+	// update mailboxes right away.
+	u.updateMailboxes()
+
+	for {
+		time.Sleep(15 * time.Second)
+
+		// Update project mailboxes
+		u.runUpdate(false)
 	}
-	// Get list of projects
+}
+
+func (u *User) runUpdate(firstTime bool) {
+	log.Println("Run update.")
+
+	// Update projects
+	if err := u.updateProjects(); err != nil {
+		log.Printf("Failed to get projects: %v", err)
+	}
+
+	if firstTime {
+		// skip mailbox update the first time.
+		return
+	}
+
+	// Update mailboxes
+	u.updateMailboxes()
+}
+
+func (u *User) updateMailboxes() {
+	u.RLock()
+	defer u.RUnlock()
+
+	for _, mbox := range u.mailboxes {
+		mbox.runUpdate(u.hal)
+	}
+}
+
+func (u *User) updateProjects() error {
+	u.Lock()
+	defer u.Unlock()
+
+	// Get first page of projects
 	col, err := u.hal.GetCollection("/api/v3/projects")
 	if err != nil {
 		return fmt.Errorf("Failed to get projects: %s", err)
 	}
 
+	return u.createProjects(col)
+}
+
+func (u *User) createProjects(col *hal.Collection) error {
 	for _, itemRes := range col.Items() {
 		proj, ok := itemRes.(*hal.Project)
 		if !ok {
 			return fmt.Errorf("Invalid resource type: %s", itemRes.ResourceType())
 		}
-		name := proj.Name()
-		// Check if mailbox already exists
-		if _, ok := u.mailboxes[name]; ok {
-			continue
-		}
-		// Create IMAP mailbox for Project
-		log.Printf("Create Project folder: %v", name)
-		mbox := NewProjectMailbox(u, proj)
-		u.mailboxes[name] = mbox
-		// Auto subscribe to project mailboxes
-		mbox.SetSubscribed(true)
+		// Create mailbox if it doesn't exist.
+		u.createProjectMailbox(proj)
 	}
 
-	// Schedule next update 30 seconds.
-	u.nextUpdate = time.Now().Add(time.Second * 30)
+	// Check for next page of projects.
+	if col.IsPaginated() {
+		if nextCol, err := col.NextPage(u.hal); err == nil {
+			return u.createProjects(nextCol)
+		}
+	}
 	return nil
 }
 
@@ -109,11 +144,6 @@ func (u *User) Username() string {
 func (u *User) ListMailboxes(subscribed bool) (mailboxes []backend.Mailbox, err error) {
 	u.RLock()
 	defer u.RUnlock()
-
-	// Update project mailboxes
-	if err := u.updateProjects(); err != nil {
-		log.Printf("Failed to get projects: %v", err)
-	}
 
 	for _, mailbox := range u.mailboxes {
 		if subscribed && !mailbox.Subscribed {
@@ -136,7 +166,7 @@ func (u *User) GetMailbox(name string) (mailbox backend.Mailbox, err error) {
 	return
 }
 
-func (u *User) createMailbox(name string, specialUse string) (mailbox *Mailbox, err error) {
+func (u *User) createMailbox(name string, specialUse string) (*Mailbox, error) {
 	if mbox, ok := u.mailboxes[name]; ok {
 		return mbox, errors.New("Mailbox already exists")
 	}
@@ -144,6 +174,21 @@ func (u *User) createMailbox(name string, specialUse string) (mailbox *Mailbox, 
 	mbox := NewMailbox(u, name, specialUse)
 	u.mailboxes[name] = mbox
 	return mbox, nil
+}
+
+func (u *User) createProjectMailbox(proj *hal.Project) (*Mailbox, bool) {
+	name := proj.Name()
+	if mbox, ok := u.mailboxes[name]; ok {
+		return mbox, true
+	}
+
+	mbox := NewProjectMailbox(u, proj)
+	u.mailboxes[name] = mbox
+
+	// Auto subscribe to project mailboxes
+	mbox.SetSubscribed(true)
+
+	return mbox, false
 }
 
 func (u *User) CreateMailbox(name string) error {
