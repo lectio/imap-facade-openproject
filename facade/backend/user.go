@@ -60,19 +60,19 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 	user.runUpdate(true)
 
 	// Start background updater
-	go user.updater()
+	go user.updater(backend.updateInterval)
 
 	return user
 }
 
-func (u *User) updater() {
+func (u *User) updater(interval int) {
 	log.Println("User updater: started.")
 
 	// update mailboxes right away.
 	u.updateMailboxes()
 
 	for {
-		time.Sleep(15 * time.Second)
+		time.Sleep(time.Second * time.Duration(interval))
 
 		// Update project mailboxes
 		u.runUpdate(false)

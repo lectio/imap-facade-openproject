@@ -18,7 +18,8 @@ type Backend struct {
 	sync.RWMutex
 
 	// OpenProject
-	base string
+	base           string
+	updateInterval int
 
 	users map[string]*User
 
@@ -91,8 +92,9 @@ func New(cfg *viper.Viper) *Backend {
 	log.Println("OpenProject Backend: ", base)
 
 	return &Backend{
-		base:    base,
-		users:   make(map[string]*User),
-		updates: make(chan backend.Update),
+		base:           base,
+		updateInterval: cfg.GetInt("updateInterval"),
+		users:          make(map[string]*User),
+		updates:        make(chan backend.Update),
 	}
 }

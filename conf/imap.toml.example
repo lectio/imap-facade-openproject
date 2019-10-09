@@ -1,6 +1,7 @@
 
 [openprojects]
 base = "https://community.openproject.com/"
+updateInterval = 30
 
 [tls]
 enabled = true
