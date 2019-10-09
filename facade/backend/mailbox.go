@@ -66,16 +66,27 @@ func NewProjectMailbox(user *User, project *hal.Project) *Mailbox {
 	return mbox
 }
 
-func (mbox *Mailbox) workPackageToMessage(w *hal.WorkPackage) error {
+func (mbox *Mailbox) checkWorkPackage(w *hal.WorkPackage) bool {
+	mbox.RLock()
+	defer mbox.RUnlock()
+
 	id := w.Id()
 	// Check for existing message.
 	if _, ok := mbox.workMap[id]; ok {
 		// TODO: check if work package has changed.
+		return false
+	}
+	return true
+}
+
+func (mbox *Mailbox) workPackageToMessage(c *hal.HalClient, w *hal.WorkPackage) error {
+	id := w.Id()
+	// Check if work package needs to be created/updated
+	if !mbox.checkWorkPackage(w) {
 		return nil
 	}
 
 	log.Printf("-- Create message for Work Package: %s", w.Subject())
-	u := mbox.user
 
 	// Get Work package text & html parts
 	var text, html string
@@ -85,25 +96,29 @@ func (mbox *Mailbox) workPackageToMessage(w *hal.WorkPackage) error {
 		html = htmlHeader + desc.Html + htmlFooter
 	}
 
+	from := formatEmailAddress(w.GetAuthor(c))
+	to := formatEmailAddress(w.GetAssignee(c))
+	cc := formatEmailAddress(w.GetResponsible(c))
 	// Build message
-	msg, err := buildSimpleMessage("contact@example.org",
-		u.user.Name()+" <"+u.email+">", w.Subject(), text, html)
+	msg, err := buildSimpleMessage(from, to, cc, w.Subject(), text, html)
 	if err != nil {
 		log.Printf("Failed to build message: subject=%s, err=%s", w.Subject(), err)
 		return err
 	}
 
+	// Modify mailbox.  Append new message.
+	mbox.Lock()
+	defer mbox.Unlock()
 	// Add message to mailbox
 	mbox.appendMessage(msg)
 
 	// map work package to message
 	mbox.workMap[id] = msg
+
 	return nil
 }
 
 func (mbox *Mailbox) createWorkPackages(c *hal.HalClient, col *hal.Collection) error {
-	// We only Lock after we got a page of work packages, to minimize the lock time.
-	mbox.Lock()
 	log.Printf("-- Load work packages from page: %d", col.Offset())
 	for _, itemRes := range col.Items() {
 		work, ok := itemRes.(*hal.WorkPackage)
@@ -111,12 +126,10 @@ func (mbox *Mailbox) createWorkPackages(c *hal.HalClient, col *hal.Collection) e
 			log.Printf("Invalid resource type: %s", itemRes.ResourceType())
 			continue
 		}
-		if err := mbox.workPackageToMessage(work); err != nil {
+		if err := mbox.workPackageToMessage(c, work); err != nil {
 			log.Printf("--- Failed to create message from work package: %s", work.Subject())
 		}
 	}
-	// Finished this page.  Unlock until we have the next page.
-	mbox.Unlock()
 
 	// Check for next page.
 	if col.IsPaginated() {

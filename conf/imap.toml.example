@@ -1,7 +1,9 @@
 
 [openprojects]
 base = "https://community.openproject.com/"
+emailDomain = "example.com"
 updateInterval = 30
+emailPlaceHolder = "user-{id}@example.com"
 
 [tls]
 enabled = true

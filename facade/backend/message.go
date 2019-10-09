@@ -23,10 +23,15 @@ type Message struct {
 	Body  []byte
 }
 
-func buildSimpleMessage(from, to, subject, text, html string) (*Message, error) {
+func buildSimpleMessage(from, to, cc, subject, text, html string) (*Message, error) {
 	e := email.NewEmail()
 	e.From = from
-	e.To = []string{to}
+	if to != "" {
+		e.To = []string{to}
+	}
+	if cc != "" {
+		e.Cc = []string{cc}
+	}
 	e.Subject = subject
 	e.Text = []byte(text)
 	e.HTML = []byte(html)

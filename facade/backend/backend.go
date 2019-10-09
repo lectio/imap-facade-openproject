@@ -4,6 +4,8 @@ package backend
 import (
 	"errors"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/spf13/viper"
@@ -12,6 +14,11 @@ import (
 	"github.com/emersion/go-imap/backend"
 
 	hal "github.com/lectio/go-json-hal"
+)
+
+var (
+	emailDomain      = "example.com"
+	emailPlaceHolder = "user-{id}@example.com"
 )
 
 type Backend struct {
@@ -24,6 +31,17 @@ type Backend struct {
 	users map[string]*User
 
 	updates chan backend.Update
+}
+
+func formatEmailAddress(u *hal.User) string {
+	if u == nil {
+		return ""
+	}
+	email := u.Email()
+	if email == "" {
+		email = strings.Replace(emailPlaceHolder, `{id}`, strconv.Itoa(u.Id()), -1)
+	}
+	return u.Name() + " <" + email + ">"
 }
 
 func (be *Backend) Login(_ *imap.ConnInfo, username, password string) (backend.User, error) {
@@ -88,6 +106,8 @@ func (be *Backend) PushUpdate(update backend.Update) {
 
 func New(cfg *viper.Viper) *Backend {
 	base := cfg.GetString("base")
+	emailDomain = cfg.GetString("emailDomain")
+	emailPlaceHolder = cfg.GetString("emailPlaceHolder")
 
 	log.Println("OpenProject Backend: ", base)
 
