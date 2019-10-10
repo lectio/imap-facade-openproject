@@ -9,6 +9,7 @@ import (
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/backend"
 	"github.com/emersion/go-imap/backend/backendutil"
+	"github.com/jordan-wright/email"
 
 	hal "github.com/lectio/go-json-hal"
 )
@@ -88,22 +89,72 @@ func (mbox *Mailbox) workPackageToMessage(c *hal.HalClient, w *hal.WorkPackage) 
 
 	log.Printf("-- Create message for Work Package: %s", w.Subject())
 
-	// Get Work package text & html parts
-	var text, html string
-	desc := w.Description()
-	if desc != nil {
-		text = desc.Raw
-		html = htmlHeader + desc.Html + htmlFooter
-	}
+	// Build message
+	e := email.NewEmail()
 
+	// Calculate 'Date' for message
+	date := time.Now()
+	if dt := w.GetCreatedAt(); dt != nil {
+		date = *dt
+	}
+	if dt := w.GetUpdatedAt(); dt != nil {
+		date = *dt
+	}
+	e.Headers.Add("Date", date.Format(time.RFC1123Z))
+
+	// From, To, CC
 	from, _ := mbox.user.getCachedAddress(w.GetLink("author"))
 	to, _ := mbox.user.getCachedAddress(w.GetLink("assignee"))
 	cc, _ := mbox.user.getCachedAddress(w.GetLink("responsible"))
-	// Build message
-	msg, err := buildSimpleMessage(from, to, cc, w.Subject(), text, html)
+
+	e.From = from
+	if to != "" {
+		e.To = []string{to}
+	}
+	if cc != "" {
+		e.Cc = []string{cc}
+	}
+
+	// Subject
+	subject := w.Subject()
+	e.Subject = subject
+
+	// Format Work package text & html parts
+	if desc := w.Description(); desc != nil {
+		e.Text = []byte(desc.Raw)
+		e.HTML = []byte(htmlHeader + desc.Html + htmlFooter)
+	}
+
+	// Add attachments
+	if attachments := w.GetAttachments(c); attachments != nil {
+		for _, res := range attachments.Items() {
+			atRes, ok := res.(*hal.Attachment)
+			if !ok {
+				log.Printf("Invalid attachment=%+v", res)
+			}
+			// TODO: cache attachment
+			reader, err := atRes.Download(c)
+			if err != nil {
+				log.Printf("Failed to download attachment: %+v, err=%v", atRes, err)
+				continue
+			}
+			if _, err := e.Attach(reader, atRes.FileName(), atRes.ContentType()); err != nil {
+				log.Printf("Failed to add attachment: %v", err)
+			}
+		}
+	}
+
+	buf, err := e.Bytes()
 	if err != nil {
 		log.Printf("Failed to build message: subject=%s, err=%s", w.Subject(), err)
 		return err
+	}
+	msg := &Message{
+		Uid:   1,
+		Date:  date,
+		Flags: []string{},
+		Size:  uint32(len(buf)),
+		Body:  buf,
 	}
 
 	// Modify mailbox.  Append new message.

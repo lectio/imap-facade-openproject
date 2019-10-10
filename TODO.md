@@ -4,8 +4,7 @@ TODO
 ### Required
 
 * BoltDB for caching messages and per-user flags.
-* Add attachments to messages.
-* Caching of user info (name & email)
+* Global attachment cache.
 
 ### Optional?
 * Cache work packages.  Don't re-download for each user.
