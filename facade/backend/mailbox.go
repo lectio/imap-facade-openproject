@@ -96,9 +96,9 @@ func (mbox *Mailbox) workPackageToMessage(c *hal.HalClient, w *hal.WorkPackage) 
 		html = htmlHeader + desc.Html + htmlFooter
 	}
 
-	from := formatEmailAddress(w.GetAuthor(c))
-	to := formatEmailAddress(w.GetAssignee(c))
-	cc := formatEmailAddress(w.GetResponsible(c))
+	from, _ := mbox.user.getCachedAddress(w.GetLink("author"))
+	to, _ := mbox.user.getCachedAddress(w.GetLink("assignee"))
+	cc, _ := mbox.user.getCachedAddress(w.GetLink("responsible"))
 	// Build message
 	msg, err := buildSimpleMessage(from, to, cc, w.Subject(), text, html)
 	if err != nil {

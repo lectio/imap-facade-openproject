@@ -24,6 +24,9 @@ type User struct {
 	email     string
 	mailboxes map[string]*Mailbox
 
+	// per-user cache
+	cache *cachedObjects
+
 	user *hal.User
 }
 
@@ -41,6 +44,7 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 		password:  password,
 		email:     email,
 		mailboxes: map[string]*Mailbox{},
+		cache:     newCachedObjects(),
 	}
 
 	// Message for tests
@@ -63,6 +67,15 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 	go user.updater(backend.updateInterval)
 
 	return user
+}
+
+func (u *User) getCachedAddress(link *hal.Link) (string, bool) {
+	addr, err := u.cache.LoadCachedAddress(u.hal, link)
+	if err != nil {
+		log.Printf("Failed to get user details: link=%+v, err=%s", link, err)
+		return "", false
+	}
+	return addr, true
 }
 
 func (u *User) updater(interval int) {
@@ -135,6 +148,10 @@ func (u *User) createProjects(col *hal.Collection) error {
 		}
 	}
 	return nil
+}
+
+func (u *User) Backend() *Backend {
+	return u.backend
 }
 
 func (u *User) Username() string {

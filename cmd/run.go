@@ -19,16 +19,8 @@ var runCmd = &cobra.Command{
 		if cfgTLS != nil {
 			facade.InitTLS(cfgTLS)
 		}
-		cfgOP := viper.Sub("openprojects")
-		if cfgOP == nil {
-			log.Fatal("Missing 'openprojects'")
-		}
-		cfgIMAP := viper.Sub("imap")
-		if cfgIMAP == nil {
-			log.Fatal("Missing 'imap'")
-		}
 		log.Println("Run facade")
-		if s, err := facade.NewFacade(cfgIMAP, cfgOP); err != nil {
+		if s, err := facade.NewFacade(); err != nil {
 			log.Fatal("Failed connecting to servers:", err)
 		} else {
 			defer s.Close()

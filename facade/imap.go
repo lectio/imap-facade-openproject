@@ -20,7 +20,21 @@ type ImapFacade struct {
 	server *server.Server
 }
 
-func NewFacade(cfgIMAP *viper.Viper, cfgOP *viper.Viper) (*ImapFacade, error) {
+func NewFacade() (*ImapFacade, error) {
+	cfgCache := viper.Sub("cache")
+	if cfgCache == nil {
+		log.Fatal("Missing 'cache'")
+	}
+	backend.InitCache(cfgCache)
+
+	cfgOP := viper.Sub("openprojects")
+	if cfgOP == nil {
+		log.Fatal("Missing 'openprojects'")
+	}
+	cfgIMAP := viper.Sub("imap")
+	if cfgIMAP == nil {
+		log.Fatal("Missing 'imap'")
+	}
 	// Create a OpenProject backend
 	be := backend.New(cfgOP)
 

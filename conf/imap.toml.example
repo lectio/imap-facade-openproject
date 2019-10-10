@@ -5,6 +5,9 @@ emailDomain = "example.com"
 updateInterval = 30
 emailPlaceHolder = "user-{id}@example.com"
 
+[cache]
+nameExpire = 5
+
 [tls]
 enabled = true
 mode = "autocert"
