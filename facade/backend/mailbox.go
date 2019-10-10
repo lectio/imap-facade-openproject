@@ -1,8 +1,10 @@
 package backend
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -87,8 +89,9 @@ func (mbox *Mailbox) workPackageToMessage(c *hal.HalClient, w *hal.WorkPackage) 
 		return nil
 	}
 
-	log.Printf("-- Create message for Work Package: %s", w.Subject())
+	fmt.Printf("-- Create message for Work Package: %s\n", w.Subject())
 
+	flags := []string{}
 	// Build message
 	e := email.NewEmail()
 
@@ -117,6 +120,12 @@ func (mbox *Mailbox) workPackageToMessage(c *hal.HalClient, w *hal.WorkPackage) 
 
 	// Subject
 	subject := w.Subject()
+	// Check for Important marker `!1`
+	if strings.HasSuffix(subject, " !1") {
+		subject = strings.TrimSuffix(subject, " !1")
+		flags = append(flags, imap.FlaggedFlag)
+		fmt.Printf("----- Found important: %s\n", subject)
+	}
 	e.Subject = subject
 
 	// Format Work package text & html parts
@@ -152,7 +161,7 @@ func (mbox *Mailbox) workPackageToMessage(c *hal.HalClient, w *hal.WorkPackage) 
 	msg := &Message{
 		Uid:   1,
 		Date:  date,
-		Flags: []string{},
+		Flags: flags,
 		Size:  uint32(len(buf)),
 		Body:  buf,
 	}
