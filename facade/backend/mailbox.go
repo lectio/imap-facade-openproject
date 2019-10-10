@@ -123,8 +123,7 @@ func (mbox *Mailbox) workPackageToMessage(c *hal.HalClient, w *hal.WorkPackage) 
 	// Check for Important marker `!1`
 	if strings.HasSuffix(subject, " !1") {
 		subject = strings.TrimSuffix(subject, " !1")
-		flags = append(flags, imap.FlaggedFlag)
-		fmt.Printf("----- Found important: %s\n", subject)
+		flags = append(flags, imap.FlaggedFlag, "Important")
 	}
 	e.Subject = subject
 
