@@ -13,7 +13,7 @@ require (
 	github.com/emersion/go-imap-unselect v0.0.0-20171113212723-b985794e5f26
 	github.com/emersion/go-message v0.10.7
 	github.com/jordan-wright/email v0.0.0-20190819015918-041e0cec78b0
-	github.com/lectio/go-json-hal v0.0.0-20191009182755-56630a489c28
+	github.com/lectio/go-json-hal v0.0.0-20191010161423-58c97d0eb226
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/viper v1.4.0
 	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
