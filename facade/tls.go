@@ -37,6 +37,11 @@ func InitTLS(cfg *viper.Viper) error {
 	scfg.DNSProvider = cfg.GetString("dnsProvider")
 	if cfg.GetBool("local") {
 		scfg.Local = true
+		// Don't update /etc/hosts by default
+		scfg.UpdateHosts = false
+	}
+	if cfg.GetBool("updateHosts") {
+		scfg.UpdateHosts = true
 	}
 	httpAddress := cfg.GetString("httpAddress")
 	if httpAddress == "" {
@@ -63,15 +68,15 @@ func InitTLS(cfg *viper.Viper) error {
 	// init strict tlsConfig with certReloader
 	// you could also use a default &tls.Config{}, but be warned this is highly insecure
 	mode := cfg.GetString("mode")
-	tlsconf := tlsconfig.NewServerTLSConfig(tlsconfig.TLSModeServer(mode))
+	tlsConfig = tlsconfig.NewServerTLSConfig(tlsconfig.TLSModeServer(mode))
 
 	// now set GetCertificate to the reloaders GetCertificateFunc to enable hot reload
-	tlsconf.GetCertificate = certReloader.GetCertificateFunc()
+	tlsConfig.GetCertificate = certReloader.GetCertificateFunc()
 
 	// init server
 	s := &http.Server{
 		Addr:      tlsAddress,
-		TLSConfig: tlsconf,
+		TLSConfig: tlsConfig,
 	}
 
 	log.Printf("Start Autocert HTTPServer: %s", tlsAddress)
