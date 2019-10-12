@@ -9,12 +9,20 @@ emailPlaceHolder = "user-{id}@example.com"
 nameExpire = 5
 
 [tls]
+# Enable TLS support for IMAP
 enabled = true
-auto = true
+# TLS security modes: loose, strict, default
 mode = "strict"
+# Use LetsEncrypt for automatic certificate support
+auto = true
+# For local development (self-signed cert)
+local = false
+# http and https listen ports
 httpAddress = ":80"
 httpsAddress = ":443"
+# Hosts to create certs for.
 hosts = [ "imap.example.com", "example.com" ]
+# folder to store certs
 path = "certs"
 
 [imap]
