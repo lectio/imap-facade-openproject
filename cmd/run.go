@@ -17,7 +17,9 @@ var runCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		cfgTLS := viper.Sub("tls")
 		if cfgTLS != nil {
-			facade.InitTLS(cfgTLS)
+			if err := facade.InitTLS(cfgTLS); err != nil {
+				log.Fatal("Failed to initialize TLS support:", err)
+			}
 		}
 		log.Println("Run facade")
 		if s, err := facade.NewFacade(); err != nil {
