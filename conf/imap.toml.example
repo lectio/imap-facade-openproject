@@ -10,9 +10,10 @@ nameExpire = 5
 
 [tls]
 enabled = true
-mode = "autocert"
-#address = ":8443"
-address = ":https"
+auto = true
+mode = "strict"
+httpAddress = ":80"
+httpsAddress = ":443"
 hosts = [ "imap.example.com", "example.com" ]
 path = "certs"
 

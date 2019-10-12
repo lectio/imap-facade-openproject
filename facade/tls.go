@@ -7,7 +7,8 @@ import (
 
 	"github.com/spf13/viper"
 
-	"golang.org/x/crypto/acme/autocert"
+	"github.com/foomo/simplecert"
+	"github.com/foomo/tlsconfig"
 )
 
 var (
@@ -21,34 +22,66 @@ func InitTLS(cfg *viper.Viper) error {
 		return nil
 	}
 
-	path := cfg.GetString("path")
-	mode := cfg.GetString("mode")
-	if mode != "autocert" {
+	auto := cfg.GetBool("auto")
+	if !auto {
 		log.Println("-------- TODO: manual cert loading.")
 		tlsEnabled = false
 		return nil
 	}
 
-	m := &autocert.Manager{
-		Prompt: autocert.AcceptTOS,
+	// Setup simplecert
+	scfg := simplecert.Default
+	scfg.CacheDir = cfg.GetString("path")
+	scfg.Domains = cfg.GetStringSlice("hosts")
+	scfg.SSLEmail = cfg.GetString("email")
+	scfg.DNSProvider = cfg.GetString("dnsProvider")
+	if cfg.GetBool("local") {
+		scfg.Local = true
 	}
-	if path != "" {
-		m.Cache = autocert.DirCache(path)
+	httpAddress := cfg.GetString("httpAddress")
+	if httpAddress == "" {
+		httpAddress = ":80"
+		scfg.HTTPAddress = httpAddress
 	}
-	hosts := cfg.GetStringSlice("hosts")
-	if hosts != nil && len(hosts) > 0 {
-		m.HostPolicy = autocert.HostWhitelist(hosts...)
+	tlsAddress := cfg.GetString("httpsAddress")
+	if tlsAddress == "" {
+		tlsAddress = ":443"
+		scfg.TLSAddress = tlsAddress
 	}
-	tlsConfig = m.TLSConfig()
-	addr := cfg.GetString("address")
+
+	certReloader, err := simplecert.Init(scfg, nil)
+	if err != nil {
+		return err
+	}
+
+	// redirect HTTP to HTTPS
+	// CAUTION: This has to be done AFTER simplecert setup
+	// Otherwise Port 80 will be blocked and cert registration fails!
+	log.Println("starting HTTP Listener on: ", httpAddress)
+	go http.ListenAndServe(httpAddress, http.HandlerFunc(simplecert.Redirect))
+
+	// init strict tlsConfig with certReloader
+	// you could also use a default &tls.Config{}, but be warned this is highly insecure
+	mode := cfg.GetString("mode")
+	tlsconf := tlsconfig.NewServerTLSConfig(tlsconfig.TLSModeServer(mode))
+
+	// now set GetCertificate to the reloaders GetCertificateFunc to enable hot reload
+	tlsconf.GetCertificate = certReloader.GetCertificateFunc()
+
+	// init server
 	s := &http.Server{
-		Addr:      addr,
-		TLSConfig: tlsConfig,
+		Addr:      tlsAddress,
+		TLSConfig: tlsconf,
 	}
-	go (func() {
-		log.Printf("Start Autocert HTTPServer: %s", addr)
-		err := s.ListenAndServeTLS("", "")
-		log.Fatal(err)
-	})()
+
+	log.Printf("Start Autocert HTTPServer: %s", tlsAddress)
+	go startTLS(s)
 	return nil
+}
+
+func startTLS(s *http.Server) {
+	err := s.ListenAndServeTLS("", "")
+	if err != nil {
+		log.Fatal(err)
+	}
 }
