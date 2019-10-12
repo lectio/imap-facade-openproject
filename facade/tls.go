@@ -2,6 +2,7 @@ package facade
 
 import (
 	"crypto/tls"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -34,6 +35,9 @@ func InitTLS(cfg *viper.Viper) error {
 	scfg.CacheDir = cfg.GetString("path")
 	scfg.Domains = cfg.GetStringSlice("hosts")
 	scfg.SSLEmail = cfg.GetString("email")
+	if scfg.SSLEmail == "" {
+		return fmt.Errorf("`tls.email` required for LetsEncrypt registration.")
+	}
 	scfg.DNSProvider = cfg.GetString("dnsProvider")
 	if cfg.GetBool("local") {
 		scfg.Local = true

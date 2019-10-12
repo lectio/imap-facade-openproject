@@ -15,6 +15,8 @@ enabled = true
 mode = "strict"
 # Use LetsEncrypt for automatic certificate support
 auto = true
+# Email address for LetsEnrypt registration.  Required
+email = "name@example.com"
 # For local development (self-signed cert)
 local = false
 # http and https listen ports
