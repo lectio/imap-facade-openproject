@@ -3,6 +3,7 @@ package backend
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"sync"
 	"time"
@@ -25,7 +26,7 @@ type User struct {
 	mailboxes map[string]*Mailbox
 
 	// per-user cache
-	cache *cachedObjects
+	cache *PerUserCache
 
 	user *hal.User
 }
@@ -36,15 +37,16 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 		email = userRes.Login()
 	}
 
+	username := userRes.Login()
 	user := &User{
 		backend:   backend,
 		hal:       hal,
 		user:      userRes,
-		username:  userRes.Login(),
+		username:  username,
 		password:  password,
 		email:     email,
 		mailboxes: map[string]*Mailbox{},
-		cache:     newCachedObjects(),
+		cache:     backend.cache.NewPerUserCache(username),
 	}
 
 	// Message for tests
@@ -69,13 +71,21 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 	return user
 }
 
+func (u *User) LoadAttachment(hc *hal.HalClient, at *hal.Attachment) (io.Reader, error) {
+	return u.backend.LoadAttachment(hc, at)
+}
+
 func (u *User) getCachedAddress(link *hal.Link) (string, bool) {
-	addr, err := u.cache.LoadCachedAddress(u.hal, link)
+	addr, err := u.backend.LoadCachedAddress(u.hal, link)
 	if err != nil {
 		log.Printf("Failed to get user details: link=%+v, err=%s", link, err)
 		return "", false
 	}
 	return addr, true
+}
+
+func (u *User) DownloadAttachment(at *hal.Attachment) ([]byte, error) {
+	return nil, nil
 }
 
 func (u *User) updater(interval int) {

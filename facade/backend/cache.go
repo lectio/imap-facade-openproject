@@ -1,10 +1,14 @@
 package backend
 
 import (
+	"bytes"
 	"fmt"
-	"sync"
+	"io"
+	"io/ioutil"
+	"log"
 	"time"
 
+	"github.com/asdine/storm"
 	hal "github.com/lectio/go-json-hal"
 	"github.com/spf13/viper"
 )
@@ -13,60 +17,33 @@ var (
 	nameExpire = time.Second * 10
 )
 
-type cacheUser struct {
+type Profile struct {
 	Id    int
 	Name  string
 	Email string
 
 	NameAndAddress string
 
-	lastUpdated time.Time
+	LastUpdated time.Time
 }
 
-func (u *cacheUser) checkExpire() bool {
-	return u.lastUpdated.Add(nameExpire).Before(time.Now())
+func (u *Profile) checkExpire() bool {
+	return u.LastUpdated.Add(nameExpire).Before(time.Now())
 }
 
-type cacheUsers struct {
-	sync.RWMutex
-
-	cache map[string]*cacheUser
-}
-
-func newCacheUsers() *cacheUsers {
-	return &cacheUsers{
-		cache: make(map[string]*cacheUser),
-	}
-}
-
-func (c *cacheUsers) getCachedAddress(link *hal.Link) (string, bool) {
-	c.RLock()
-	defer c.RUnlock()
-	if user, ok := c.cache[link.Href]; ok {
-		if user.checkExpire() {
-			return "", false
-		}
-		return user.NameAndAddress, true
-	}
-	return "", false
-}
-
-func (c *cacheUsers) cacheUser(link *hal.Link, user *cacheUser) {
-	c.Lock()
-	defer c.Unlock()
-
-	user.lastUpdated = time.Now()
-	c.cache[link.Href] = user
-}
-
-func (c *cacheUsers) LoadCachedAddress(hc *hal.HalClient, link *hal.Link) (string, error) {
+func (c *Cache) LoadCachedAddress(hc *hal.HalClient, link *hal.Link) (string, error) {
 	if link == nil || link.Href == "" {
 		return "", nil
 	}
 
 	// try getting from cache
-	if addr, ok := c.getCachedAddress(link); ok {
-		return addr, nil
+	profile := Profile{}
+	if err := c.db.Get("profiles", link.Href, &profile); err == nil {
+		// Check if it has expired.
+		if !profile.checkExpire() {
+			// still valid.
+			return profile.NameAndAddress, nil
+		}
 	}
 
 	// request User resource
@@ -79,33 +56,95 @@ func (c *cacheUsers) LoadCachedAddress(hc *hal.HalClient, link *hal.Link) (strin
 		return "", fmt.Errorf("Invalid resource: %v", res)
 	}
 
-	// Cache new user
-	user := &cacheUser{
-		Id:             userRes.Id(),
-		Name:           userRes.Name(),
-		Email:          userRes.Email(),
-		NameAndAddress: formatEmailAddress(userRes),
+	// create/update cached profile
+	profile.Id = userRes.Id()
+	profile.Name = userRes.Name()
+	profile.Email = userRes.Email()
+	profile.NameAndAddress = formatEmailAddress(userRes)
+	profile.LastUpdated = time.Now()
+	if err := c.db.Set("profiles", link.Href, profile); err != nil {
+		return "", fmt.Errorf("Failed to cache user profile: %v", err)
 	}
-	c.cacheUser(link, user)
-	return user.NameAndAddress, nil
+
+	return profile.NameAndAddress, nil
 }
 
-type cachedObjects struct {
-	sync.RWMutex
+func (c *Cache) LoadAttachment(hc *hal.HalClient, at *hal.Attachment) (io.Reader, error) {
+	link := at.GetLink("downloadLocation")
+	if link == nil || link.Href == "" {
+		return nil, fmt.Errorf("Missing download link for attachment: %+v", at)
+	}
+	// Check for cached attachment
+	if buf, err := c.db.GetBytes("attachments", link.Href); err == nil {
+		log.Println("Found cached attachment:", link.Href)
+		return bytes.NewReader(buf), nil
+	}
+	// Download attachment
+	atReader, err := at.Download(hc)
+	if err != nil {
+		log.Printf("Failed to download attachment: %+v, err=%v", at, err)
+		return nil, err
+	}
+	// Read attachment into byte array
+	buf, err := ioutil.ReadAll(atReader)
+	if err != nil {
+		log.Printf("Error reading attachment: %+v, err=%v", at, err)
+		return nil, err
+	}
+	// Cache attachment
+	if err := c.db.SetBytes("attachments", link.Href, buf); err != nil {
+		log.Println("Failed to cache attachment:", err)
+	}
 
-	cacheUserDetails *cacheUsers
+	return bytes.NewReader(buf), nil
 }
 
-func newCachedObjects() *cachedObjects {
-	return &cachedObjects{
-		cacheUserDetails: newCacheUsers(),
+type PerUserCache struct {
+	node storm.Node
+}
+
+type Cache struct {
+	db *storm.DB
+}
+
+func (c *Cache) Close() {
+	if c.db != nil {
+		c.db.Close()
+		c.db = nil
 	}
 }
 
-func (c *cachedObjects) LoadCachedAddress(hc *hal.HalClient, link *hal.Link) (string, error) {
-	return c.cacheUserDetails.LoadCachedAddress(hc, link)
+func (c *Cache) NewPerUserCache(username string) *PerUserCache {
+	return &PerUserCache{
+		node: c.db.From("perUser").From(username),
+	}
 }
 
-func InitCache(cfg *viper.Viper) {
+func (c *Cache) GetDB() *storm.DB {
+	return c.db
+}
+
+func (c *Cache) GetNode(name string) storm.Node {
+	return c.db.From(name)
+}
+
+func NewCache(cfg *viper.Viper) *Cache {
+	if cfg == nil {
+		log.Fatal("Missing cache settings.")
+	}
+	// global cache settings.
 	nameExpire = time.Duration(cfg.GetInt("nameExpire")) * time.Second
+
+	cache := &Cache{}
+
+	// Open boltdb
+	file := cfg.GetString("db")
+	if db, err := storm.Open(file); err != nil {
+		log.Fatal("Failed to open cache db:", err)
+		return nil
+	} else {
+		cache.db = db
+	}
+
+	return cache
 }

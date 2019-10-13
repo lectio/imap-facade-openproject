@@ -3,6 +3,7 @@ package backend
 
 import (
 	"errors"
+	"io"
 	"log"
 	"strconv"
 	"strings"
@@ -31,6 +32,8 @@ type Backend struct {
 	users map[string]*User
 
 	updates chan backend.Update
+
+	cache *Cache
 }
 
 func formatEmailAddress(u *hal.User) string {
@@ -104,10 +107,24 @@ func (be *Backend) PushUpdate(update backend.Update) {
 	<-wait
 }
 
+func (be *Backend) LoadAttachment(hc *hal.HalClient, at *hal.Attachment) (io.Reader, error) {
+	return be.cache.LoadAttachment(hc, at)
+}
+
+func (be *Backend) LoadCachedAddress(hc *hal.HalClient, link *hal.Link) (string, error) {
+	return be.cache.LoadCachedAddress(hc, link)
+}
+
+func (be *Backend) Close() {
+	be.cache.Close()
+}
+
 func New(cfg *viper.Viper) *Backend {
 	base := cfg.GetString("base")
 	emailDomain = cfg.GetString("emailDomain")
 	emailPlaceHolder = cfg.GetString("emailPlaceHolder")
+
+	cache := NewCache(cfg.Sub("cache"))
 
 	log.Println("OpenProject Backend: ", base)
 
@@ -116,5 +133,6 @@ func New(cfg *viper.Viper) *Backend {
 		updateInterval: cfg.GetInt("updateInterval"),
 		users:          make(map[string]*User),
 		updates:        make(chan backend.Update),
+		cache:          cache,
 	}
 }

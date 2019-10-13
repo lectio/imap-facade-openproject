@@ -5,7 +5,8 @@ emailDomain = "example.com"
 updateInterval = 30
 emailPlaceHolder = "user-{id}@example.com"
 
-[cache]
+[openprojects.cache]
+db = "data/cache.db"
 nameExpire = 5
 
 [tls]
@@ -25,7 +26,7 @@ httpsAddress = ":443"
 # Hosts to create certs for.
 hosts = [ "imap.example.com", "example.com" ]
 # folder to store certs
-path = "certs"
+path = "data/certs"
 
 [imap]
 address = "0.0.0.0:2143"

@@ -140,8 +140,7 @@ func (mbox *Mailbox) workPackageToMessage(c *hal.HalClient, w *hal.WorkPackage) 
 			if !ok {
 				log.Printf("Invalid attachment=%+v", res)
 			}
-			// TODO: cache attachment
-			reader, err := atRes.Download(c)
+			reader, err := mbox.user.LoadAttachment(c, atRes)
 			if err != nil {
 				log.Printf("Failed to download attachment: %+v, err=%v", atRes, err)
 				continue

@@ -17,16 +17,11 @@ import (
 )
 
 type ImapFacade struct {
-	server *server.Server
+	backend *backend.Backend
+	server  *server.Server
 }
 
 func NewFacade() (*ImapFacade, error) {
-	cfgCache := viper.Sub("cache")
-	if cfgCache == nil {
-		log.Fatal("Missing 'cache'")
-	}
-	backend.InitCache(cfgCache)
-
 	cfgOP := viper.Sub("openprojects")
 	if cfgOP == nil {
 		log.Fatal("Missing 'openprojects'")
@@ -63,11 +58,14 @@ func NewFacade() (*ImapFacade, error) {
 	s.AllowInsecureAuth = true
 
 	return &ImapFacade{
-		server: s,
+		backend: be,
+		server:  s,
 	}, nil
 }
 
 func (g *ImapFacade) Close() {
+	g.server.Close()
+	g.backend.Close()
 }
 
 func (g *ImapFacade) Run() {

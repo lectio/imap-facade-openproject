@@ -26,7 +26,7 @@ COPY --from=build /go/bin/imap-facade-openproject /imap-facade
 ARG  WORKDIR="/app"
 WORKDIR ${WORKDIR}
 VOLUME  ./conf ${WORKDIR}/conf
-VOLUME  ./certs ${WORKDIR}/certs
+VOLUME  ./data ${WORKDIR}/data
 EXPOSE  443/tcp
 EXPOSE  2143/tcp
 ENTRYPOINT [ "/imap-facade" ]

@@ -8,6 +8,7 @@ replace github.com/foomo/simplecert => github.com/Neopallium/simplecert v1.6.2
 
 require (
 	github.com/ProtonMail/go-imap-id v0.0.0-20190926060100-f94a56b9ecde
+	github.com/asdine/storm v2.1.2+incompatible
 	github.com/emersion/go-imap v0.0.0-00010101000000-000000000000
 	github.com/emersion/go-imap-idle v0.0.0-20190519112320-2704abd7050e
 	github.com/emersion/go-imap-move v0.0.0-20190710073258-6e5a51a5b342
