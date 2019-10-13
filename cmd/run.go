@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"log"
+	"os"
+	"os/signal"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -26,7 +28,17 @@ var runCmd = &cobra.Command{
 			log.Fatal("Failed connecting to servers:", err)
 		} else {
 			defer s.Close()
-			s.Run()
+
+			// run imap server in goroutine
+			go s.Run()
+
+			// Listen for shutdown signals
+			c := make(chan os.Signal, 1)
+			signal.Notify(c, os.Interrupt)
+
+			// Wait for shutodwn signal.
+			s := <-c
+			log.Println("Got signal:", s)
 		}
 	},
 }
