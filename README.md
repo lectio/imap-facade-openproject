@@ -25,7 +25,7 @@ Make sure to change the `base` variable to your OpenProject URL.
 Or with docker
 
     # build docker image
-    docker build -t imap-facade-openproject:v1 .
+    docker build -t imap-facade-openproject .
 		# run with docker-compose
 		docker-compose up
 
