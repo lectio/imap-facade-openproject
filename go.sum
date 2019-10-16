@@ -52,6 +52,8 @@ github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
 github.com/Neopallium/go-imap v1.0.1 h1:vY4WolJDJbsn0HrwiIpkv2QI1BZwWvdi5uzb2MejD0E=
 github.com/Neopallium/go-imap v1.0.1/go.mod h1:uPXUdjS+b/upgF3rJMgX/QeVVkmk7jAGMwMMD7Ne3S4=
+github.com/Neopallium/simplecert v1.6.2-0.20191016150557-f383a399b2c4 h1:1llsyDURQ388pVuJIBx/6ozrhhwXxcpfnFsgfufRsaE=
+github.com/Neopallium/simplecert v1.6.2-0.20191016150557-f383a399b2c4/go.mod h1:xiHU9xOUHaSNpm5TP+hRdaQ7umbkVrzUk7PhnXlwefA=
 github.com/Neopallium/simplecert v1.6.2 h1:EjLKfsy2b38MF96hjClsZHnfb1jkR0xac5SmqNUwTJQ=
 github.com/Neopallium/simplecert v1.6.2/go.mod h1:xiHU9xOUHaSNpm5TP+hRdaQ7umbkVrzUk7PhnXlwefA=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=

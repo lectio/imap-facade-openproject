@@ -76,7 +76,6 @@ func (c *Cache) LoadAttachment(hc *hal.HalClient, at *hal.Attachment) (io.Reader
 	}
 	// Check for cached attachment
 	if buf, err := c.db.GetBytes("attachments", link.Href); err == nil {
-		log.Println("Found cached attachment:", link.Href)
 		return bytes.NewReader(buf), nil
 	}
 	// Download attachment
@@ -99,10 +98,6 @@ func (c *Cache) LoadAttachment(hc *hal.HalClient, at *hal.Attachment) (io.Reader
 	return bytes.NewReader(buf), nil
 }
 
-type PerUserCache struct {
-	node storm.Node
-}
-
 type Cache struct {
 	db *storm.DB
 }
@@ -111,12 +106,6 @@ func (c *Cache) Close() {
 	if c.db != nil {
 		c.db.Close()
 		c.db = nil
-	}
-}
-
-func (c *Cache) NewPerUserCache(username string) *PerUserCache {
-	return &PerUserCache{
-		node: c.db.From("perUser").From(username),
 	}
 }
 

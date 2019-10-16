@@ -16,11 +16,24 @@ import (
 )
 
 type Message struct {
-	Uid   uint32
+	Uid   uint32 `storm:"id,increment"`
 	Date  time.Time
 	Size  uint32
 	Flags []string
-	Body  []byte
+
+	// Work Package message fields
+	WorkPackageID int `json:",omitempty"`
+
+	// Don't keep message bodies loaded in memory
+	body []byte
+	mbox *Mailbox
+}
+
+func (m *Message) getBody() []byte {
+	if m.body == nil {
+		m.mbox.loadMessageBody(m)
+	}
+	return m.body
 }
 
 func buildSimpleMessage(from, to, cc, subject, text, html string) (*Message, error) {
@@ -41,18 +54,17 @@ func buildSimpleMessage(from, to, cc, subject, text, html string) (*Message, err
 		return nil, err
 	}
 	msg := &Message{
-		Uid:   1,
 		Date:  time.Now(),
 		Flags: []string{},
 		Size:  uint32(len(buf)),
-		Body:  buf,
+		body:  buf,
 	}
 
 	return msg, nil
 }
 
 func (m *Message) entity() (*message.Entity, error) {
-	ent, err := message.Read(bytes.NewReader(m.Body))
+	ent, err := message.Read(bytes.NewReader(m.getBody()))
 	if err != nil {
 		log.Printf("Failed decode message body: %s", err)
 	}
@@ -60,7 +72,7 @@ func (m *Message) entity() (*message.Entity, error) {
 }
 
 func (m *Message) headerAndBody() (textproto.Header, io.Reader, error) {
-	body := bufio.NewReader(bytes.NewReader(m.Body))
+	body := bufio.NewReader(bytes.NewReader(m.getBody()))
 	hdr, err := textproto.ReadHeader(body)
 	if err != nil {
 		log.Printf("Failed decode message headers and body: %s", err)
@@ -111,7 +123,7 @@ func (m *Message) Fetch(seqNum uint32, items []imap.FetchItem) (*imap.Message, e
 				break
 			}
 
-			body := bufio.NewReader(bytes.NewReader(m.Body))
+			body := bufio.NewReader(bytes.NewReader(m.getBody()))
 			hdr, err := textproto.ReadHeader(body)
 			if err != nil {
 				log.Printf("Fetch: Failed to decode headers & body: %s", err)

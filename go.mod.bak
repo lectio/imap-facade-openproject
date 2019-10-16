@@ -4,7 +4,8 @@ go 1.12
 
 replace github.com/emersion/go-imap => github.com/Neopallium/go-imap v1.0.1
 
-replace github.com/foomo/simplecert => github.com/Neopallium/simplecert v1.6.2-0.20191016150557-f383a399b2c4
+//replace github.com/lectio/go-json-hal => /home/robert/projects/netspective/go-json-hal
+replace github.com/foomo/simplecert => github.com/Neopallium/simplecert v1.6.2
 
 require (
 	github.com/ProtonMail/go-imap-id v0.0.0-20190926060100-f94a56b9ecde

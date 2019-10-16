@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/asdine/storm"
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/backend"
 	"github.com/emersion/go-imap/backend/backendutil"
@@ -28,14 +29,23 @@ var Delimiter = "/"
 type Mailbox struct {
 	sync.RWMutex
 
+	Id          int    `storm:"id,increment"`
+	MailboxName string `storm:"unique" json:"Name"`
+
 	Flags       []string
 	Attributes  []string
 	Subscribed  bool
-	Messages    []*Message
 	UidValidity uint32
 
-	name string
+	msgs []*Message
+
+	// Mailbox storage
+	store storm.Node
+
 	user *User
+
+	// OpenProject Fields
+	ProjectID int `json:",omitempty"`
 
 	project *hal.Project
 	// Map WorkPackage ID to message
@@ -44,9 +54,8 @@ type Mailbox struct {
 
 func NewMailbox(user *User, name string, specialUse string) *Mailbox {
 	mbox := &Mailbox{
-		name: name, user: user,
+		MailboxName: name,
 		UidValidity: uint32(time.Now().Nanosecond()),
-		Messages:    []*Message{},
 		Flags: []string{
 			imap.AnsweredFlag,
 			imap.FlaggedFlag,
@@ -55,18 +64,44 @@ func NewMailbox(user *User, name string, specialUse string) *Mailbox {
 			imap.DraftFlag,
 			"nonjunk",
 		},
-		workMap: make(map[int]*Message),
 	}
 	if specialUse != "" {
 		mbox.Attributes = []string{specialUse}
 	}
+	user.appendMailbox(mbox, true)
 	return mbox
 }
 
 func NewProjectMailbox(user *User, project *hal.Project) *Mailbox {
 	mbox := NewMailbox(user, project.Name(), "")
 	mbox.project = project
+	mbox.ProjectID = project.Id()
 	return mbox
+}
+
+func (mbox *Mailbox) init() {
+	mbox.msgs = []*Message{}
+	mbox.workMap = make(map[int]*Message)
+
+	// Initialize mailbox storage
+	if err := mbox.store.Init(&Message{}); err != nil {
+		log.Println("Failed to initialize mailbox's message store:", err)
+	}
+
+	// load messages
+	if err := mbox.store.All(&mbox.msgs); err != nil {
+		log.Println("Failed to load mailbox's messages:", err)
+	}
+	//log.Printf("-------------- stored messages: len=%d", len(mbox.msgs))
+	for _, msg := range mbox.msgs {
+		msg.mbox = mbox
+		id := msg.WorkPackageID
+		//log.Printf("-- mbox(%s) load msg(%d): Work=%d", mbox.Name(), msg.Uid, msg.WorkPackageID)
+		if id > 0 {
+			mbox.workMap[id] = msg
+		}
+	}
+
 }
 
 func (mbox *Mailbox) checkWorkPackage(w *hal.WorkPackage) bool {
@@ -157,11 +192,11 @@ func (mbox *Mailbox) workPackageToMessage(c *hal.HalClient, w *hal.WorkPackage) 
 		return err
 	}
 	msg := &Message{
-		Uid:   1,
-		Date:  date,
-		Flags: flags,
-		Size:  uint32(len(buf)),
-		Body:  buf,
+		Date:          date,
+		Flags:         flags,
+		Size:          uint32(len(buf)),
+		WorkPackageID: w.Id(),
+		body:          buf,
 	}
 
 	// Modify mailbox.  Append new message.
@@ -221,7 +256,7 @@ func (mbox *Mailbox) updateWorkPackages(c *hal.HalClient) error {
 }
 
 func (mbox *Mailbox) Name() string {
-	return mbox.name
+	return mbox.MailboxName
 }
 
 func (mbox *Mailbox) Info() (*imap.MailboxInfo, error) {
@@ -231,14 +266,14 @@ func (mbox *Mailbox) Info() (*imap.MailboxInfo, error) {
 	info := &imap.MailboxInfo{
 		Attributes: mbox.Attributes,
 		Delimiter:  Delimiter,
-		Name:       mbox.name,
+		Name:       mbox.MailboxName,
 	}
 	return info, nil
 }
 
 func (mbox *Mailbox) uidNext() uint32 {
 	var uid uint32
-	for _, msg := range mbox.Messages {
+	for _, msg := range mbox.msgs {
 		if msg.Uid > uid {
 			uid = msg.Uid
 		}
@@ -254,7 +289,7 @@ type messageStats struct {
 
 func (mbox *Mailbox) getMsgStats() messageStats {
 	stats := messageStats{}
-	for i, msg := range mbox.Messages {
+	for i, msg := range mbox.msgs {
 
 		seen := false
 		for _, flag := range msg.Flags {
@@ -276,7 +311,7 @@ func (mbox *Mailbox) getMsgStats() messageStats {
 }
 
 func (mbox *Mailbox) status(items []imap.StatusItem, flags bool) (*imap.MailboxStatus, error) {
-	status := imap.NewMailboxStatus(mbox.name, items)
+	status := imap.NewMailboxStatus(mbox.MailboxName, items)
 	if flags {
 		// Copy flags slice (don't re-use slice)
 		flags := append(mbox.Flags[:0:0], mbox.Flags...)
@@ -289,7 +324,7 @@ func (mbox *Mailbox) status(items []imap.StatusItem, flags bool) (*imap.MailboxS
 	for _, name := range items {
 		switch name {
 		case imap.StatusMessages:
-			status.Messages = uint32(len(mbox.Messages))
+			status.Messages = uint32(len(mbox.msgs))
 		case imap.StatusUidNext:
 			status.UidNext = mbox.uidNext()
 		case imap.StatusUidValidity:
@@ -317,6 +352,7 @@ func (mbox *Mailbox) SetSubscribed(subscribed bool) error {
 
 	mbox.Subscribed = subscribed
 
+	mbox.saveMailbox()
 	return nil
 }
 
@@ -329,7 +365,7 @@ func (mbox *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fe
 	defer mbox.RUnlock()
 	defer close(ch)
 
-	for i, msg := range mbox.Messages {
+	for i, msg := range mbox.msgs {
 		seqNum := uint32(i + 1)
 
 		var id uint32
@@ -358,7 +394,7 @@ func (mbox *Mailbox) SearchMessages(uid bool, criteria *imap.SearchCriteria) ([]
 	defer mbox.RUnlock()
 
 	var ids []uint32
-	for i, msg := range mbox.Messages {
+	for i, msg := range mbox.msgs {
 		seqNum := uint32(i + 1)
 
 		ok, err := msg.Match(seqNum, criteria)
@@ -377,9 +413,36 @@ func (mbox *Mailbox) SearchMessages(uid bool, criteria *imap.SearchCriteria) ([]
 	return ids, nil
 }
 
+func (mbox *Mailbox) saveMailbox() {
+	mbox.user.updateMailbox(mbox)
+}
+
+func (mbox *Mailbox) loadMessageBody(msg *Message) {
+	if buf, err := mbox.store.GetBytes("bodies", msg.Uid); err == nil {
+		msg.body = buf
+	} else {
+		log.Println("Failed to load message body:", err)
+	}
+}
+
 func (mbox *Mailbox) appendMessage(msg *Message) {
-	msg.Uid = mbox.uidNext()
-	mbox.Messages = append(mbox.Messages, msg)
+	msg.mbox = mbox
+
+	// Save message
+	if err := mbox.store.Save(msg); err != nil {
+		log.Println("Error saving message in mailbox:", err)
+	}
+
+	//log.Printf("--- mbox(%s) Stored message: %d", mbox.Name(), msg.Uid)
+
+	if msg.body != nil {
+		// Save message body.
+		if err := mbox.store.SetBytes("bodies", msg.Uid, msg.body); err != nil {
+			log.Println("Failed to store message body:", err)
+		}
+	}
+
+	mbox.msgs = append(mbox.msgs, msg)
 }
 
 func (mbox *Mailbox) CreateMessage(flags []string, date time.Time, body imap.Literal) error {
@@ -399,14 +462,20 @@ func (mbox *Mailbox) CreateMessage(flags []string, date time.Time, body imap.Lit
 		Date:  date,
 		Size:  uint32(len(b)),
 		Flags: append(flags, imap.RecentFlag),
-		Body:  b,
+		body:  b,
 	})
 	mbox.Flags = backendutil.UpdateFlags(mbox.Flags, imap.AddFlags, flags)
+	mbox.saveMailbox()
 	mbox.user.PushMailboxUpdate(mbox)
 	return nil
 }
 
 func (mbox *Mailbox) pushMessageUpdate(uid bool, msg *Message, seqNum uint32) {
+	// Update message
+	if err := mbox.store.Update(msg); err != nil {
+		log.Println("Error updating message in mailbox:", err)
+	}
+
 	items := []imap.FetchItem{imap.FetchFlags}
 	if uid {
 		items = append(items, imap.FetchUid)
@@ -414,7 +483,7 @@ func (mbox *Mailbox) pushMessageUpdate(uid bool, msg *Message, seqNum uint32) {
 	uMsg := imap.NewMessage(seqNum, items)
 	uMsg.Flags = msg.Flags
 	uMsg.Uid = msg.Uid
-	mbox.user.PushMessageUpdate(mbox.name, uMsg)
+	mbox.user.PushMessageUpdate(mbox.MailboxName, uMsg)
 }
 
 func CompareFlags(a, b []string) bool {
@@ -440,7 +509,7 @@ func (mbox *Mailbox) UpdateMessagesFlags(uid bool, seqset *imap.SeqSet, op imap.
 	mbox.Lock()
 	defer mbox.Unlock()
 
-	for i, msg := range mbox.Messages {
+	for i, msg := range mbox.msgs {
 		var id uint32
 		if uid {
 			id = msg.Uid
@@ -461,6 +530,7 @@ func (mbox *Mailbox) UpdateMessagesFlags(uid bool, seqset *imap.SeqSet, op imap.
 	if op == imap.AddFlags || op == imap.SetFlags {
 		if newFlags, changed := UpdateFlags(mbox.Flags, imap.AddFlags, flags); changed {
 			mbox.Flags = newFlags
+			mbox.saveMailbox()
 			mbox.user.PushMailboxUpdate(mbox)
 		}
 	}
@@ -468,6 +538,7 @@ func (mbox *Mailbox) UpdateMessagesFlags(uid bool, seqset *imap.SeqSet, op imap.
 	return nil
 }
 
+// TODO: CopyMessages must also lock destination mailbox.
 func (mbox *Mailbox) CopyMessages(uid bool, seqset *imap.SeqSet, destName string) error {
 	mbox.Lock()
 	defer mbox.Unlock()
@@ -477,7 +548,7 @@ func (mbox *Mailbox) CopyMessages(uid bool, seqset *imap.SeqSet, destName string
 		return backend.ErrNoSuchMailbox
 	}
 
-	for i, msg := range mbox.Messages {
+	for i, msg := range mbox.msgs {
 		var id uint32
 		if uid {
 			id = msg.Uid
@@ -490,13 +561,15 @@ func (mbox *Mailbox) CopyMessages(uid bool, seqset *imap.SeqSet, destName string
 
 		msgCopy := *msg
 		msgCopy.Uid = dest.uidNext()
-		dest.Messages = append(dest.Messages, &msgCopy)
+		dest.msgs = append(dest.msgs, &msgCopy)
 	}
+	dest.saveMailbox()
 	mbox.user.PushMailboxUpdate(dest)
 
 	return nil
 }
 
+// TODO: MoveMessages must also lock destination mailbox.
 func (mbox *Mailbox) MoveMessages(uid bool, seqset *imap.SeqSet, destName string) error {
 	mbox.Lock()
 	defer mbox.Unlock()
@@ -507,7 +580,7 @@ func (mbox *Mailbox) MoveMessages(uid bool, seqset *imap.SeqSet, destName string
 	}
 
 	flags := []string{imap.DeletedFlag}
-	for i, msg := range mbox.Messages {
+	for i, msg := range mbox.msgs {
 		var id uint32
 		if uid {
 			id = msg.Uid
@@ -520,19 +593,21 @@ func (mbox *Mailbox) MoveMessages(uid bool, seqset *imap.SeqSet, destName string
 
 		msgCopy := *msg
 		msgCopy.Uid = dest.uidNext()
-		dest.Messages = append(dest.Messages, &msgCopy)
+		dest.msgs = append(dest.msgs, &msgCopy)
 		// Mark source message as deleted
 		msg.Flags = backendutil.UpdateFlags(msg.Flags, imap.AddFlags, flags)
 	}
 
+	dest.saveMailbox()
 	mbox.user.PushMailboxUpdate(dest)
+	mbox.saveMailbox()
 	mbox.user.PushMailboxUpdate(mbox)
 	return mbox.expunge()
 }
 
 func (mbox *Mailbox) expunge() error {
-	for i := len(mbox.Messages) - 1; i >= 0; i-- {
-		msg := mbox.Messages[i]
+	for i := len(mbox.msgs) - 1; i >= 0; i-- {
+		msg := mbox.msgs[i]
 
 		deleted := false
 		for _, flag := range msg.Flags {
@@ -543,9 +618,9 @@ func (mbox *Mailbox) expunge() error {
 		}
 
 		if deleted {
-			mbox.Messages = append(mbox.Messages[:i], mbox.Messages[i+1:]...)
+			mbox.msgs = append(mbox.msgs[:i], mbox.msgs[i+1:]...)
 			// send expunge update
-			mbox.user.PushExpungeUpdate(mbox.name, uint32(i+1))
+			mbox.user.PushExpungeUpdate(mbox.MailboxName, uint32(i+1))
 		}
 	}
 

@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strconv"
 	"sync"
 	"time"
 
+	"github.com/asdine/storm"
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/backend"
 
@@ -26,7 +28,10 @@ type User struct {
 	mailboxes map[string]*Mailbox
 
 	// per-user cache
-	cache *PerUserCache
+	store storm.Node
+
+	// project to mailbox map
+	projMap map[int]*Mailbox
 
 	user *hal.User
 }
@@ -36,8 +41,14 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 	if email == "" {
 		email = userRes.Login()
 	}
-
 	username := userRes.Login()
+
+	// Initialize user storage
+	store := backend.cache.GetNode("Users").From(username)
+	if err := store.Init(&Mailbox{}); err != nil {
+		log.Println("Failed to initialize mailboxes store:", err)
+	}
+
 	user := &User{
 		backend:   backend,
 		hal:       hal,
@@ -46,21 +57,20 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 		password:  password,
 		email:     email,
 		mailboxes: map[string]*Mailbox{},
-		cache:     backend.cache.NewPerUserCache(username),
+		store:     store,
 	}
 
-	// Message for tests
-	body := "Hi " + userRes.Name() + ",\r\n" +
-		"Welcome to the lectio IMAP facade for OpenProjects."
-	html := "<html><head></head><body>" + body + "</body></html>"
+	// load mailboxes
+	var mboxes []*Mailbox
+	if err := store.All(&mboxes); err != nil {
+		log.Println("Failed to load user's mailboxes:", err)
+	}
+	for _, mbox := range mboxes {
+		user.appendMailbox(mbox, false)
+	}
 
-	msg, _ := buildSimpleMessage("contact@"+emailDomain,
-		formatEmailAddress(userRes), "",
-		"Welcome new lectio user", body, html)
-
-	user.createMailbox("INBOX", "")
-	inbox := user.mailboxes["INBOX"]
-	inbox.appendMessage(msg)
+	inbox, _ := user.createMailbox("INBOX", "")
+	user.createWelcomeMessage(inbox)
 
 	// Initial update
 	user.runUpdate(true)
@@ -69,6 +79,19 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 	go user.updater(backend.updateInterval)
 
 	return user
+}
+
+func (u *User) createWelcomeMessage(mbox *Mailbox) {
+	// Message for tests
+	body := "Hi " + u.user.Name() + ",\r\n" +
+		"Welcome to the lectio IMAP facade for OpenProjects."
+	html := "<html><head></head><body>" + body + "</body></html>"
+
+	msg, _ := buildSimpleMessage("contact@"+emailDomain,
+		formatEmailAddress(u.user), "",
+		"Welcome new lectio user", body, html)
+
+	mbox.appendMessage(msg)
 }
 
 func (u *User) LoadAttachment(hc *hal.HalClient, at *hal.Attachment) (io.Reader, error) {
@@ -82,10 +105,6 @@ func (u *User) getCachedAddress(link *hal.Link) (string, bool) {
 		return "", false
 	}
 	return addr, true
-}
-
-func (u *User) DownloadAttachment(at *hal.Attachment) ([]byte, error) {
-	return nil, nil
 }
 
 func (u *User) updater(interval int) {
@@ -148,7 +167,11 @@ func (u *User) createProjects(col *hal.Collection) error {
 			return fmt.Errorf("Invalid resource type: %s", itemRes.ResourceType())
 		}
 		// Create mailbox if it doesn't exist.
-		u.createProjectMailbox(proj)
+		mbox, _ := u.createProjectMailbox(proj)
+		if mbox.project == nil {
+			mbox.project = proj
+			mbox.ProjectID = proj.Id()
+		}
 	}
 
 	// Check for next page of projects.
@@ -191,6 +214,34 @@ func (u *User) GetMailbox(name string) (mailbox backend.Mailbox, err error) {
 		err = errors.New("No such mailbox")
 	}
 	return
+}
+
+func (u *User) updateMailbox(mbox *Mailbox) {
+	//log.Printf("--- Update Mailbox: %+v", mbox)
+	// Update mailbox
+	if err := u.store.Update(mbox); err != nil {
+		log.Println("Error updating mailbox:", err)
+	}
+}
+
+func (u *User) appendMailbox(mbox *Mailbox, isNew bool) {
+	mbox.user = u
+	name := mbox.Name()
+
+	if isNew {
+		// Save mailbox if it is new
+		if err := u.store.Save(mbox); err != nil {
+			log.Println("Error saving mailbox:", err)
+		}
+	}
+	//log.Printf("--- Append mailbox(%s): id=%d, isNew=%v", mbox.Name(), mbox.Id, isNew)
+
+	// Get mailbox storage
+	store := u.store.From("mailboxes").From(strconv.Itoa(mbox.Id))
+	mbox.store = store
+
+	mbox.init()
+	u.mailboxes[name] = mbox
 }
 
 func (u *User) createMailbox(name string, specialUse string) (*Mailbox, error) {
@@ -251,7 +302,7 @@ func (u *User) RenameMailbox(existingName, newName string) error {
 	}
 
 	// Move mailbox to new name.
-	mbox.name = newName
+	mbox.MailboxName = newName
 	u.mailboxes[newName] = mbox
 	delete(u.mailboxes, existingName)
 
@@ -265,7 +316,7 @@ func (u *User) RenameMailbox(existingName, newName string) error {
 
 func (u *User) PushMailboxUpdate(mbox *Mailbox) {
 	update := &backend.MailboxUpdate{}
-	update.Update = backend.NewUpdate(u.username, mbox.name)
+	update.Update = backend.NewUpdate(u.username, mbox.Name())
 	status, err := mbox.status([]imap.StatusItem{imap.StatusMessages, imap.StatusUnseen}, true)
 	if err == nil {
 		update.MailboxStatus = status
