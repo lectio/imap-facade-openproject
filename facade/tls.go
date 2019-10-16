@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
-	"net/http"
 
 	"github.com/spf13/viper"
 
@@ -48,26 +47,14 @@ func InitTLS(cfg *viper.Viper) error {
 		scfg.UpdateHosts = true
 	}
 	httpAddress := cfg.GetString("httpAddress")
-	if httpAddress == "" {
-		httpAddress = ":80"
-		scfg.HTTPAddress = httpAddress
-	}
+	scfg.HTTPAddress = httpAddress
 	tlsAddress := cfg.GetString("httpsAddress")
-	if tlsAddress == "" {
-		tlsAddress = ":443"
-		scfg.TLSAddress = tlsAddress
-	}
+	scfg.TLSAddress = tlsAddress
 
 	certReloader, err := simplecert.Init(scfg, nil)
 	if err != nil {
 		return err
 	}
-
-	// redirect HTTP to HTTPS
-	// CAUTION: This has to be done AFTER simplecert setup
-	// Otherwise Port 80 will be blocked and cert registration fails!
-	log.Println("starting HTTP Listener on: ", httpAddress)
-	go http.ListenAndServe(httpAddress, http.HandlerFunc(simplecert.Redirect))
 
 	// init strict tlsConfig with certReloader
 	// you could also use a default &tls.Config{}, but be warned this is highly insecure
@@ -77,20 +64,5 @@ func InitTLS(cfg *viper.Viper) error {
 	// now set GetCertificate to the reloaders GetCertificateFunc to enable hot reload
 	tlsConfig.GetCertificate = certReloader.GetCertificateFunc()
 
-	// init server
-	s := &http.Server{
-		Addr:      tlsAddress,
-		TLSConfig: tlsConfig,
-	}
-
-	log.Printf("Start Autocert HTTPServer: %s", tlsAddress)
-	go startTLS(s)
 	return nil
-}
-
-func startTLS(s *http.Server) {
-	err := s.ListenAndServeTLS("", "")
-	if err != nil {
-		log.Fatal(err)
-	}
 }
