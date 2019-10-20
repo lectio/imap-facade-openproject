@@ -13,6 +13,8 @@ import (
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/backend"
 
+	specialuse "github.com/emersion/go-imap-specialuse"
+
 	hal "github.com/lectio/go-json-hal"
 )
 
@@ -69,8 +71,10 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 		user.appendMailbox(mbox, false)
 	}
 
-	inbox, _ := user.createMailbox("INBOX", "")
-	user.createWelcomeMessage(inbox)
+	if inbox, err := user.createMailbox("INBOX", ""); err == nil {
+		user.createWelcomeMessage(inbox)
+	}
+	user.createMailbox("Trash", specialuse.Trash)
 
 	// Initial update
 	user.runUpdate(true)
@@ -217,7 +221,6 @@ func (u *User) GetMailbox(name string) (mailbox backend.Mailbox, err error) {
 }
 
 func (u *User) updateMailbox(mbox *Mailbox) {
-	//log.Printf("--- Update Mailbox: %+v", mbox)
 	// Update mailbox
 	if err := u.store.Update(mbox); err != nil {
 		log.Println("Error updating mailbox:", err)
@@ -234,7 +237,6 @@ func (u *User) appendMailbox(mbox *Mailbox, isNew bool) {
 			log.Println("Error saving mailbox:", err)
 		}
 	}
-	//log.Printf("--- Append mailbox(%s): id=%d, isNew=%v", mbox.Name(), mbox.Id, isNew)
 
 	// Get mailbox storage
 	store := u.store.From("mailboxes").From(strconv.Itoa(mbox.Id))

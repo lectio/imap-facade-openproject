@@ -92,11 +92,9 @@ func (mbox *Mailbox) init() {
 	if err := mbox.store.All(&mbox.msgs); err != nil {
 		log.Println("Failed to load mailbox's messages:", err)
 	}
-	//log.Printf("-------------- stored messages: len=%d", len(mbox.msgs))
 	for _, msg := range mbox.msgs {
 		msg.mbox = mbox
 		id := msg.WorkPackageID
-		//log.Printf("-- mbox(%s) load msg(%d): Work=%d", mbox.Name(), msg.Uid, msg.WorkPackageID)
 		if id > 0 {
 			mbox.workMap[id] = msg
 		}
@@ -426,6 +424,18 @@ func (mbox *Mailbox) getMessageBody(msg *Message) []byte {
 	return nil
 }
 
+func (mbox *Mailbox) deleteMessage(msg *Message) {
+	// Delete message body.
+	if err := mbox.store.Delete("bodies", msg.Uid); err != nil {
+		log.Println("Failed to delete message body:", err)
+	}
+
+	// Delete message
+	if err := mbox.store.DeleteStruct(msg); err != nil {
+		log.Println("Error deleting message in mailbox:", err)
+	}
+}
+
 func (mbox *Mailbox) appendMessage(msg *Message) {
 	msg.mbox = mbox
 
@@ -434,16 +444,12 @@ func (mbox *Mailbox) appendMessage(msg *Message) {
 		log.Println("Error saving message in mailbox:", err)
 	}
 
-	//log.Printf("--- mbox(%s) Stored message: %d", mbox.Name(), msg.Uid)
-
-	if msg.body != nil {
-		// Save message body.
-		if err := mbox.store.SetBytes("bodies", msg.Uid, msg.body); err != nil {
-			log.Println("Failed to store message body:", err)
-		}
-		// Don't keep message body in memory
-		msg.body = nil
+	// Save message body.
+	if err := mbox.store.SetBytes("bodies", msg.Uid, msg.body); err != nil {
+		log.Println("Failed to store message body:", err)
 	}
+	// Don't keep message body in memory
+	msg.body = nil
 
 	mbox.msgs = append(mbox.msgs, msg)
 }
@@ -562,9 +568,8 @@ func (mbox *Mailbox) CopyMessages(uid bool, seqset *imap.SeqSet, destName string
 			continue
 		}
 
-		msgCopy := *msg
-		msgCopy.Uid = dest.uidNext()
-		dest.msgs = append(dest.msgs, &msgCopy)
+		msgCopy := msg.copy()
+		dest.appendMessage(msgCopy)
 	}
 	dest.saveMailbox()
 	mbox.user.PushMailboxUpdate(dest)
@@ -594,9 +599,8 @@ func (mbox *Mailbox) MoveMessages(uid bool, seqset *imap.SeqSet, destName string
 			continue
 		}
 
-		msgCopy := *msg
-		msgCopy.Uid = dest.uidNext()
-		dest.msgs = append(dest.msgs, &msgCopy)
+		msgCopy := msg.copy()
+		dest.appendMessage(msgCopy)
 		// Mark source message as deleted
 		msg.Flags = backendutil.UpdateFlags(msg.Flags, imap.AddFlags, flags)
 	}
@@ -621,6 +625,7 @@ func (mbox *Mailbox) expunge() error {
 		}
 
 		if deleted {
+			mbox.deleteMessage(msg)
 			mbox.msgs = append(mbox.msgs[:i], mbox.msgs[i+1:]...)
 			// send expunge update
 			mbox.user.PushExpungeUpdate(mbox.MailboxName, uint32(i+1))

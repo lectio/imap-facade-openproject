@@ -29,6 +29,12 @@ type Message struct {
 	mbox *Mailbox
 }
 
+func (m *Message) copy() *Message {
+	msgCopy := *m
+	msgCopy.body = m.getBody()
+	return &msgCopy
+}
+
 func (m *Message) getBody() []byte {
 	if m.body == nil {
 		return m.mbox.getMessageBody(m)
