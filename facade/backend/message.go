@@ -31,7 +31,7 @@ type Message struct {
 
 func (m *Message) getBody() []byte {
 	if m.body == nil {
-		m.mbox.loadMessageBody(m)
+		return m.mbox.getMessageBody(m)
 	}
 	return m.body
 }

@@ -417,12 +417,13 @@ func (mbox *Mailbox) saveMailbox() {
 	mbox.user.updateMailbox(mbox)
 }
 
-func (mbox *Mailbox) loadMessageBody(msg *Message) {
+func (mbox *Mailbox) getMessageBody(msg *Message) []byte {
 	if buf, err := mbox.store.GetBytes("bodies", msg.Uid); err == nil {
-		msg.body = buf
+		return buf
 	} else {
 		log.Println("Failed to load message body:", err)
 	}
+	return nil
 }
 
 func (mbox *Mailbox) appendMessage(msg *Message) {
@@ -440,6 +441,8 @@ func (mbox *Mailbox) appendMessage(msg *Message) {
 		if err := mbox.store.SetBytes("bodies", msg.Uid, msg.body); err != nil {
 			log.Println("Failed to store message body:", err)
 		}
+		// Don't keep message body in memory
+		msg.body = nil
 	}
 
 	mbox.msgs = append(mbox.msgs, msg)
