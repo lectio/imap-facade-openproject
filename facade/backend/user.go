@@ -149,7 +149,7 @@ func (u *User) updateWorkPackageFlags(msg *Message) error {
 
 	te, err := u.getTimeEntry(msg.WorkPackageID, true)
 	if err != nil {
-		return fmt.Errorf("Error getting time entry for work package: %s", err)
+		return err
 	}
 	flags := strings.Join(msg.Flags, ",")
 	te.SetComment("plain", flags, flags)
@@ -171,7 +171,7 @@ func (u *User) updateWorkPackageFlags(msg *Message) error {
 
 	// Record changes.
 	if res, err := te.Update(u.hal); err != nil {
-		return fmt.Errorf("Error updating time entry for work package: %s", err)
+		return err
 	} else {
 		// Store updated time entry
 		if updatedEntry, ok := res.(*hal.TimeEntry); ok {
@@ -240,6 +240,11 @@ func (u *User) getTimeEntry(work_id int, create bool) (*hal.TimeEntry, error) {
 	te.SetComment("plain", "", "")
 	te.SetActivity(u.activity.Href)
 	if res, err := w.AddTimeEntry(u.hal, te); err != nil {
+		if resErr, ok := err.(*hal.Error); ok {
+			if resErr.ErrorIdentifier == "urn:openproject-org:api:v3:errors:MissingPermission" {
+				return nil, fmt.Errorf("Permission denied creating time entry.  Make sure the 'Time tracking' module is enabled for this project.")
+			}
+		}
 		return nil, err
 	} else {
 		te, ok = res.(*hal.TimeEntry)
