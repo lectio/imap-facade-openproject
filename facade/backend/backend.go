@@ -130,6 +130,10 @@ func New(cfg *viper.Viper) *Backend {
 	emailPlaceHolder = cfg.GetString("emailPlaceHolder")
 
 	activityName = cfg.GetString("timeEntryActivity")
+	if activityName == "" {
+		// Default to "Other"
+		activityName = "Other"
+	}
 
 	cache := NewCache(cfg.Sub("cache"))
 
