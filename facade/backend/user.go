@@ -163,7 +163,7 @@ func (u *User) updateWorkPackageFlags(msg *Message) error {
 	}
 
 	if seen {
-		te.SetHours(1 * time.Minute)
+		te.SetHours(msg.ReadingTime())
 		te.SetSpentOn(time.Now())
 	} else {
 		te.SetHours(0)

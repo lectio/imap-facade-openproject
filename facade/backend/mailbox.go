@@ -161,8 +161,10 @@ func (mbox *Mailbox) workPackageToMessage(c *hal.HalClient, w *hal.WorkPackage) 
 	e.Subject = subject
 
 	// Format Work package text & html parts
+	text := ""
 	if desc := w.Description(); desc != nil {
-		e.Text = []byte(desc.Raw)
+		text = desc.Raw
+		e.Text = []byte(text)
 		e.HTML = []byte(htmlHeader + desc.Html + htmlFooter)
 	}
 
@@ -195,6 +197,7 @@ func (mbox *Mailbox) workPackageToMessage(c *hal.HalClient, w *hal.WorkPackage) 
 		Size:          uint32(len(buf)),
 		WorkPackageID: w.Id(),
 		body:          buf,
+		WordCount:     WordCount(text),
 	}
 
 	// Try loading flags stored in OpenProject

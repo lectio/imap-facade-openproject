@@ -20,7 +20,8 @@ import (
 var (
 	emailDomain      = "example.com"
 	emailPlaceHolder = "user-{id}@example.com"
-	activityName     = "Read"
+	activityName     = "Other"
+	wordsPerMinute   = 200.0
 )
 
 type Backend struct {
@@ -133,6 +134,10 @@ func New(cfg *viper.Viper) *Backend {
 	if activityName == "" {
 		// Default to "Other"
 		activityName = "Other"
+	}
+	wordsPerMinute = cfg.GetFloat64("wordsPerMinute")
+	if wordsPerMinute == 0 {
+		wordsPerMinute = 200.0
 	}
 
 	cache := NewCache(cfg.Sub("cache"))

@@ -6,6 +6,8 @@ updateInterval = 30
 emailPlaceHolder = "user-{id}@example.com"
 # TimeEntry Activity used for message flags
 timeEntryActivity = "Other"
+# reading rate used for reading time estimate
+wordsPerMinute = 200
 
 [openprojects.cache]
 db = "data/cache.db"

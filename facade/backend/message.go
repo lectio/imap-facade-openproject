@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"io"
 	"log"
+	"math"
+	"strings"
 	"time"
 
 	"github.com/emersion/go-imap"
@@ -15,6 +17,11 @@ import (
 	"github.com/jordan-wright/email"
 )
 
+func WordCount(text string) int {
+	words := strings.Fields(text)
+	return len(words)
+}
+
 type Message struct {
 	Uid   uint32 `storm:"id,increment"`
 	Date  time.Time
@@ -24,9 +31,20 @@ type Message struct {
 	// Work Package message fields
 	WorkPackageID int `json:",omitempty"`
 
+	// Word count for reading time estimate
+	WordCount int `json:",omitempty"`
+
 	// Don't keep message bodies loaded in memory
 	body []byte
 	mbox *Mailbox
+}
+
+// Based on: http://www.craigabbott.co.uk/how-to-calculate-reading-time-like-medium
+func (m *Message) ReadingTime() time.Duration {
+	minutes := time.Duration(math.Ceil(float64(m.WordCount) / wordsPerMinute))
+	log.Printf("--- ReadingTime(): words=%d, wordsPerMin=%f, mins=%d",
+		m.WordCount, wordsPerMinute, minutes)
+	return minutes * time.Minute
 }
 
 func (m *Message) copy() *Message {
@@ -60,10 +78,11 @@ func buildSimpleMessage(from, to, cc, subject, text, html string) (*Message, err
 		return nil, err
 	}
 	msg := &Message{
-		Date:  time.Now(),
-		Flags: []string{},
-		Size:  uint32(len(buf)),
-		body:  buf,
+		Date:      time.Now(),
+		Flags:     []string{},
+		Size:      uint32(len(buf)),
+		body:      buf,
+		WordCount: WordCount(text),
 	}
 
 	return msg, nil
