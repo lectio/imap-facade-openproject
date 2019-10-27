@@ -197,6 +197,9 @@ func (mbox *Mailbox) workPackageToMessage(c *hal.HalClient, w *hal.WorkPackage) 
 		body:          buf,
 	}
 
+	// Try loading flags stored in OpenProject
+	mbox.user.loadWorkPackageFlags(msg)
+
 	// Modify mailbox.  Append new message.
 	mbox.Lock()
 	defer mbox.Unlock()
@@ -483,6 +486,11 @@ func (mbox *Mailbox) pushMessageUpdate(uid bool, msg *Message, seqNum uint32) {
 	// Update message
 	if err := mbox.store.Update(msg); err != nil {
 		log.Println("Error updating message in mailbox:", err)
+	}
+
+	// If message is for a work package, then update flags in OpenProject
+	if msg.WorkPackageID > 0 {
+		mbox.user.updateWorkPackageFlags(msg)
 	}
 
 	items := []imap.FetchItem{imap.FetchFlags}

@@ -20,6 +20,7 @@ import (
 var (
 	emailDomain      = "example.com"
 	emailPlaceHolder = "user-{id}@example.com"
+	activityName     = "Read"
 )
 
 type Backend struct {
@@ -115,6 +116,10 @@ func (be *Backend) LoadCachedAddress(hc *hal.HalClient, link *hal.Link) (string,
 	return be.cache.LoadCachedAddress(hc, link)
 }
 
+func (be *Backend) FindTimeEntryActivityURL(hc *hal.HalClient, name string) (*hal.Link, error) {
+	return be.cache.FindTimeEntryActivityURL(hc, name)
+}
+
 func (be *Backend) Close() {
 	be.cache.Close()
 }
@@ -123,6 +128,8 @@ func New(cfg *viper.Viper) *Backend {
 	base := cfg.GetString("base")
 	emailDomain = cfg.GetString("emailDomain")
 	emailPlaceHolder = cfg.GetString("emailPlaceHolder")
+
+	activityName = cfg.GetString("timeEntryActivity")
 
 	cache := NewCache(cfg.Sub("cache"))
 

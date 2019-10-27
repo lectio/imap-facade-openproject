@@ -31,6 +31,39 @@ func (u *Profile) checkExpire() bool {
 	return u.LastUpdated.Add(nameExpire).Before(time.Now())
 }
 
+func (c *Cache) FindTimeEntryActivityURL(hc *hal.HalClient, name string) (*hal.Link, error) {
+	var activity *hal.TimeEntriesActivity
+
+	// Try getting it from the cache
+	if err := c.db.Get("timeEntriesActivities", name, &activity); err == nil {
+		return activity.GetLink("self"), nil
+	}
+
+	// HACK: OpenProject's API doesn't support listing all activities
+	// So we request activities one by one looking for the one we want.
+	activity = nil
+	for i := 0; i < 1000; i++ {
+		res, err := hc.Get(fmt.Sprintf("/api/v3/time_entries/activities/%d", i))
+		if err == nil {
+			if act, ok := res.(*hal.TimeEntriesActivity); ok {
+				if act.Name() == name {
+					activity = act
+					break
+				}
+			}
+		}
+	}
+	// Cache activity if found
+	if activity != nil {
+		if err := c.db.Set("timeEntriesActivities", name, &activity); err != nil {
+			return nil, fmt.Errorf("Failed to cache time entry activity: %v", err)
+		}
+		return activity.GetLink("self"), nil
+	}
+
+	return nil, fmt.Errorf("Failed to find Time Entry Activity: %s", name)
+}
+
 func (c *Cache) LoadCachedAddress(hc *hal.HalClient, link *hal.Link) (string, error) {
 	if link == nil || link.Href == "" {
 		return "", nil

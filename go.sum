@@ -63,6 +63,8 @@ github.com/Sereal/Sereal v0.0.0-20190618215532-0b8ac451a863 h1:BRrxwOZBolJN4gIwv
 github.com/Sereal/Sereal v0.0.0-20190618215532-0b8ac451a863/go.mod h1:D0JMgToj/WdxCgd30Kc1UcA9E+WdZoJqeVOuYW7iTBM=
 github.com/Shopify/sarama v1.19.0/go.mod h1:FVkBWblsNy7DGZRfXLU0O9RCGt5g3g3yEuWXgklEdEo=
 github.com/Shopify/toxiproxy v2.1.4+incompatible/go.mod h1:OXgGpZ6Cli1/URJOF1DMxUHB2q5Ap20/P/eIdh4G0pI=
+github.com/SpirentOrion/iso8601duration.v2 v0.0.0-20190614070654-098d2a5d655d h1:SukHOvR0q/0uwhvKzBdtmgMz8EQZ32xlNU1zuFFi5Yg=
+github.com/SpirentOrion/iso8601duration.v2 v0.0.0-20190614070654-098d2a5d655d/go.mod h1:/xXyXwk0Un+Wy+hVKerLutFhfnsXAc2iMWh5ENqLq4o=
 github.com/akamai/AkamaiOPEN-edgegrid-golang v0.9.0 h1:rXPPPxDA4GCPN0YWwyVHMzcxVpVg8gai2uGhJ3VqOSs=
 github.com/akamai/AkamaiOPEN-edgegrid-golang v0.9.0/go.mod h1:zpDJeKyp9ScW4NNrbdr+Eyxvry3ilGPewKoXw3XGN1k=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
@@ -248,8 +250,8 @@ github.com/labbsr0x/bindman-dns-webhook v1.0.2 h1:I7ITbmQPAVwrDdhd6dHKi+MYJTJqPC
 github.com/labbsr0x/bindman-dns-webhook v1.0.2/go.mod h1:p6b+VCXIR8NYKpDr8/dg1HKfQoRHCdcsROXKvmoehKA=
 github.com/labbsr0x/goh v1.0.1 h1:97aBJkDjpyBZGPbQuOK5/gHcSFbcr5aRsq3RSRJFpPk=
 github.com/labbsr0x/goh v1.0.1/go.mod h1:8K2UhVoaWXcCU7Lxoa2omWnC8gyW8px7/lmO61c027w=
-github.com/lectio/go-json-hal v0.0.0-20191010161423-58c97d0eb226 h1:HvytM520DsL6BN9YO3LHxHiENzZ6LUHbaJ+ZHkQARg0=
-github.com/lectio/go-json-hal v0.0.0-20191010161423-58c97d0eb226/go.mod h1:0GCk9uYuzV3X+EzchzdjfRMTUyOZ+0dMOke5wyEzyFo=
+github.com/lectio/go-json-hal v0.0.0-20191010272146-6d6ca9863388 h1:ozacgK4EcJ5dwYOeuFZTtyZZwQzVEqJsbnmg4CaY0cs=
+github.com/lectio/go-json-hal v0.0.0-20191010272146-6d6ca9863388/go.mod h1:4tasP9Bi76Deul/hXRYrCCRChyFCxCgt61ivlTQNI1M=
 github.com/lextoumbourou/goodhosts v2.1.0+incompatible h1:1U1p5Z1wrXl23/fW/GY4zdTbQ8UJbyvrkPbqAZ6tzbw=
 github.com/lextoumbourou/goodhosts v2.1.0+incompatible/go.mod h1:89s48k108X3gKDWn8AHk3gUzUGTcMZCCAOsE4QU1bbo=
 github.com/linode/linodego v0.10.0 h1:AMdb82HVgY8o3mjBXJcUv9B+fnJjfDMn2rNRGbX+jvM=

@@ -4,6 +4,8 @@ base = "https://community.openproject.com/"
 emailDomain = "example.com"
 updateInterval = 30
 emailPlaceHolder = "user-{id}@example.com"
+# TimeEntry Activity used for message flags
+timeEntryActivity = "Other"
 
 [openprojects.cache]
 db = "data/cache.db"

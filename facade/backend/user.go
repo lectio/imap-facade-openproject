@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,10 +36,15 @@ type User struct {
 	// project to mailbox map
 	projMap map[int]*Mailbox
 
+	// Time Entries
+	teLock      sync.RWMutex
+	activity    *hal.Link
+	timeEntries map[string]*hal.TimeEntry
+
 	user *hal.User
 }
 
-func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password string) *User {
+func NewUser(backend *Backend, hc *hal.HalClient, userRes *hal.User, password string) *User {
 	email := userRes.Email()
 	if email == "" {
 		email = userRes.Login()
@@ -52,15 +58,26 @@ func NewUser(backend *Backend, hal *hal.HalClient, userRes *hal.User, password s
 	}
 
 	user := &User{
-		backend:   backend,
-		hal:       hal,
-		user:      userRes,
-		username:  username,
-		password:  password,
-		email:     email,
-		mailboxes: map[string]*Mailbox{},
-		store:     store,
+		backend:     backend,
+		hal:         hc,
+		user:        userRes,
+		username:    username,
+		password:    password,
+		email:       email,
+		mailboxes:   map[string]*Mailbox{},
+		store:       store,
+		timeEntries: map[string]*hal.TimeEntry{},
 	}
+
+	// Get time entry activity url
+	if actLink, err := backend.FindTimeEntryActivityURL(hc, activityName); err == nil {
+		user.activity = actLink
+	} else {
+		log.Fatal("Failed to find time entry activity url:", err)
+	}
+
+	// Load time entries
+	user.loadTimeEntries()
 
 	// load mailboxes
 	var mboxes []*Mailbox
@@ -123,6 +140,181 @@ func (u *User) updater(interval int) {
 		// Update project mailboxes
 		u.runUpdate(false)
 	}
+}
+
+func (u *User) updateWorkPackageFlags(msg *Message) error {
+	u.teLock.Lock()
+	defer u.teLock.Unlock()
+
+	te, err := u.getTimeEntry(msg.WorkPackageID, true)
+	if err != nil {
+		log.Println("Error getting time entry for work package:", err)
+		return err
+	}
+	flags := strings.Join(msg.Flags, ",")
+	te.SetComment("plain", flags, flags)
+
+	// Check for 'Seen' flag
+	seen := false
+	for _, flag := range msg.Flags {
+		if flag == imap.SeenFlag {
+			seen = true
+		}
+	}
+
+	if seen {
+		te.SetHours(1 * time.Minute)
+		te.SetSpentOn(time.Now())
+	} else {
+		te.SetHours(0)
+	}
+
+	// Record changes.
+	if res, err := te.Update(u.hal); err != nil {
+		log.Println("Error updating time entry for work package:", err)
+		return err
+	} else {
+		// Store updated time entry
+		if updatedEntry, ok := res.(*hal.TimeEntry); ok {
+			te = updatedEntry
+		}
+	}
+	// Get Work package url
+	workLink := te.GetLink("workPackage")
+	if workLink == nil {
+		// Not a work package time entry, ignore it.
+		return fmt.Errorf("Updated time entry missing work package url.")
+	}
+	workURL := workLink.Href
+
+	// Store updated time entry
+	u.timeEntries[workURL] = te
+
+	return nil
+}
+
+func (u *User) loadWorkPackageFlags(msg *Message) {
+	u.teLock.Lock()
+	defer u.teLock.Unlock()
+
+	te, _ := u.getTimeEntry(msg.WorkPackageID, false)
+	if te == nil {
+		// no time entry or error.  Don't modify the Message.
+		return
+	}
+	comment := te.Comment()
+	if comment != nil && comment.Raw != "" {
+		flags := strings.Split(comment.Raw, ",")
+		if len(flags) > 0 {
+			msg.Flags = flags
+		}
+	}
+}
+
+func (u *User) getTimeEntry(work_id int, create bool) (*hal.TimeEntry, error) {
+	workURL := fmt.Sprintf("/api/v3/work_packages/%d", work_id)
+
+	// Look for existing Time Entry
+	if te, ok := u.timeEntries[workURL]; ok {
+		return te, nil
+	}
+	if !create {
+		// Don't create time entry.
+		return nil, nil
+	}
+
+	// Load work package
+	var ok bool
+	var w *hal.WorkPackage
+	if res, err := u.hal.Get(workURL); err != nil {
+		return nil, fmt.Errorf("Failed to load work package: %d", work_id)
+	} else {
+		w, ok = res.(*hal.WorkPackage)
+		if !ok {
+			return nil, fmt.Errorf("Expected a WorkPackage resource: %+v", res)
+		}
+	}
+
+	// Test creating TimeEntry
+	te := hal.NewTimeEntry()
+	te.SetHours(1 * time.Second)
+	te.SetComment("plain", "", "")
+	te.SetActivity(u.activity.Href)
+	if res, err := w.AddTimeEntry(u.hal, te); err != nil {
+		return nil, err
+	} else {
+		te, ok = res.(*hal.TimeEntry)
+		if !ok {
+			return nil, fmt.Errorf("Expected a TimeEntry resource: %+v", res)
+		}
+	}
+	log.Printf("New Time Entry added to work package: %+v", te)
+
+	// Store time entry
+	u.timeEntries[workURL] = te
+
+	return te, nil
+}
+
+func (u *User) loadTimeEntries() error {
+
+	// Get first page of time entries
+	f := hal.NewFilters().Filter("user", "=", u.user.Id())
+	col, err := u.hal.GetFilteredCollection("/api/v3/time_entries", f)
+	if err != nil {
+		return fmt.Errorf("Failed to get time entries: %s", err)
+	}
+
+	return u.processTimeEntries(col)
+}
+
+func (u *User) processTimeEntries(col *hal.Collection) error {
+	for _, itemRes := range col.Items() {
+		te, ok := itemRes.(*hal.TimeEntry)
+		if !ok {
+			return fmt.Errorf("Invalid resource type: %s", itemRes.ResourceType())
+		}
+		u.processTimeEntry(te)
+	}
+
+	// Check for next page of projects.
+	if col.IsPaginated() {
+		if nextCol, err := col.NextPage(u.hal); err == nil {
+			return u.createProjects(nextCol)
+		}
+	}
+	return nil
+}
+
+func (u *User) processTimeEntry(te *hal.TimeEntry) {
+	// Get Work package url
+	workLink := te.GetLink("workPackage")
+	if workLink == nil {
+		// Not a work package time entry, ignore it.
+		return
+	}
+	workURL := workLink.Href
+
+	updatedAt := te.GetUpdatedAt()
+	if updatedAt == nil {
+		// Missing 'updatedAt'
+		return
+	}
+
+	u.teLock.Lock()
+	defer u.teLock.Unlock()
+
+	// Check if current time entry is newer
+	if cur, ok := u.timeEntries[workURL]; ok {
+		curUpdatedAt := cur.GetUpdatedAt()
+		if curUpdatedAt.After(*updatedAt) {
+			// already have the newest
+			return
+		}
+		// Got a newer time entry
+	}
+
+	u.timeEntries[workURL] = te
 }
 
 func (u *User) runUpdate(firstTime bool) {
