@@ -74,7 +74,9 @@ func NewUser(backend *Backend, hc *hal.HalClient, userRes *hal.User, password st
 	}
 
 	// Load time entries
-	user.loadTimeEntries()
+	if err := user.loadTimeEntries(); err != nil {
+		log.Println("Error loading user's time entries:", err)
+	}
 
 	// load mailboxes
 	var mboxes []*Mailbox
@@ -88,7 +90,9 @@ func NewUser(backend *Backend, hc *hal.HalClient, userRes *hal.User, password st
 	if inbox, err := user.createMailbox("INBOX", ""); err == nil {
 		user.createWelcomeMessage(inbox)
 	}
-	user.createMailbox("Trash", specialuse.Trash)
+	if _, err := user.createMailbox("Trash", specialuse.Trash); err != nil {
+		log.Println("Failed to create mailbox:", err)
+	}
 
 	// Initial update
 	user.runUpdate(true)
@@ -145,8 +149,7 @@ func (u *User) updateWorkPackageFlags(msg *Message) error {
 
 	te, err := u.getTimeEntry(msg.WorkPackageID, true)
 	if err != nil {
-		log.Println("Error getting time entry for work package:", err)
-		return err
+		return fmt.Errorf("Error getting time entry for work package: %s", err)
 	}
 	flags := strings.Join(msg.Flags, ",")
 	te.SetComment("plain", flags, flags)
@@ -168,8 +171,7 @@ func (u *User) updateWorkPackageFlags(msg *Message) error {
 
 	// Record changes.
 	if res, err := te.Update(u.hal); err != nil {
-		log.Println("Error updating time entry for work package:", err)
-		return err
+		return fmt.Errorf("Error updating time entry for work package: %s", err)
 	} else {
 		// Store updated time entry
 		if updatedEntry, ok := res.(*hal.TimeEntry); ok {
@@ -454,7 +456,7 @@ func (u *User) createProjectMailbox(proj *hal.Project) (*Mailbox, bool) {
 	u.mailboxes[name] = mbox
 
 	// Auto subscribe to project mailboxes
-	mbox.SetSubscribed(true)
+	_ = mbox.SetSubscribed(true)
 
 	return mbox, false
 }
@@ -498,7 +500,9 @@ func (u *User) RenameMailbox(existingName, newName string) error {
 
 	if existingName == "INBOX" {
 		// Create a new INBOX
-		u.createMailbox("INBOX", "")
+		if _, err := u.createMailbox("INBOX", ""); err != nil {
+			log.Println("Error re-creating INBOX:", err)
+		}
 	}
 
 	return nil

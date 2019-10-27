@@ -236,7 +236,9 @@ func (mbox *Mailbox) createWorkPackages(c *hal.HalClient, col *hal.Collection) e
 
 func (mbox *Mailbox) runUpdate(c *hal.HalClient) {
 	// Update work packages
-	mbox.updateWorkPackages(c)
+	if err := mbox.updateWorkPackages(c); err != nil {
+		log.Println("Error updating work packages:", err)
+	}
 }
 
 func (mbox *Mailbox) updateWorkPackages(c *hal.HalClient) error {
@@ -490,7 +492,9 @@ func (mbox *Mailbox) pushMessageUpdate(uid bool, msg *Message, seqNum uint32) {
 
 	// If message is for a work package, then update flags in OpenProject
 	if msg.WorkPackageID > 0 {
-		mbox.user.updateWorkPackageFlags(msg)
+		if err := mbox.user.updateWorkPackageFlags(msg); err != nil {
+			log.Println("Error updating work package flags:", err)
+		}
 	}
 
 	items := []imap.FetchItem{imap.FetchFlags}
