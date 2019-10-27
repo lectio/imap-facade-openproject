@@ -19,7 +19,7 @@ require (
 	github.com/foomo/tlsconfig v0.0.0-20180418120404-b67861b076c9
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/jordan-wright/email v0.0.0-20190819015918-041e0cec78b0
-	github.com/lectio/go-json-hal v0.0.0-20191010272146-6d6ca9863388
+	github.com/lectio/go-json-hal v0.0.0-00010101000000-82b7b43647a9
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/viper v1.4.0
 	github.com/vmihailenco/msgpack v4.0.4+incompatible // indirect

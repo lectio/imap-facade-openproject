@@ -241,7 +241,7 @@ func (u *User) getTimeEntry(work_id int, create bool) (*hal.TimeEntry, error) {
 	te.SetActivity(u.activity.Href)
 	if res, err := w.AddTimeEntry(u.hal, te); err != nil {
 		if resErr, ok := err.(*hal.Error); ok {
-			if resErr.ErrorIdentifier == "urn:openproject-org:api:v3:errors:MissingPermission" {
+			if resErr.ErrorIdentifier() == "urn:openproject-org:api:v3:errors:MissingPermission" {
 				return nil, fmt.Errorf("Permission denied creating time entry.  Make sure the 'Time tracking' module is enabled for this project.")
 			}
 		}
