@@ -42,8 +42,6 @@ type Message struct {
 // Based on: http://www.craigabbott.co.uk/how-to-calculate-reading-time-like-medium
 func (m *Message) ReadingTime() time.Duration {
 	minutes := time.Duration(math.Ceil(float64(m.WordCount) / wordsPerMinute))
-	log.Printf("--- ReadingTime(): words=%d, wordsPerMin=%f, mins=%d",
-		m.WordCount, wordsPerMinute, minutes)
 	return minutes * time.Minute
 }
 
