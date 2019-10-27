@@ -248,7 +248,6 @@ func (u *User) getTimeEntry(work_id int, create bool) (*hal.TimeEntry, error) {
 			return nil, fmt.Errorf("Expected a TimeEntry resource: %+v", res)
 		}
 	}
-	log.Printf("New Time Entry added to work package: %+v", te)
 
 	// Store time entry
 	u.timeEntries[workURL] = te
