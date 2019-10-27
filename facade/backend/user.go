@@ -33,9 +33,6 @@ type User struct {
 	// per-user cache
 	store storm.Node
 
-	// project to mailbox map
-	projMap map[int]*Mailbox
-
 	// Time Entries
 	teLock      sync.RWMutex
 	activity    *hal.Link
