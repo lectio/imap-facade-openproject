@@ -27,6 +27,7 @@ ARG  WORKDIR="/app"
 WORKDIR ${WORKDIR}
 VOLUME  ./conf ${WORKDIR}/conf
 VOLUME  ./data ${WORKDIR}/data
+EXPOSE  80/tcp
 EXPOSE  443/tcp
 EXPOSE  2143/tcp
 ENTRYPOINT [ "/imap-facade" ]
