@@ -116,8 +116,12 @@ func (u *User) createWelcomeMessage(mbox *Mailbox) {
 	mbox.appendMessage(msg)
 }
 
-func (u *User) LoadAttachment(hc *hal.HalClient, at *hal.Attachment) (io.Reader, error) {
-	return u.backend.LoadAttachment(hc, at)
+func (u *User) GenerateMessage(w *hal.WorkPackage) (*Message, error) {
+	return u.backend.GenerateMessage(u, w)
+}
+
+func (u *User) LoadAttachment(at *hal.Attachment) (io.Reader, error) {
+	return u.backend.LoadAttachment(u.hal, at)
 }
 
 func (u *User) getCachedAddress(link *hal.Link) (string, bool) {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -12,16 +11,8 @@ import (
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/backend"
 	"github.com/emersion/go-imap/backend/backendutil"
-	"github.com/jordan-wright/email"
 
 	hal "github.com/lectio/go-json-hal"
-)
-
-const (
-	htmlHeader = `<html>
-	<head></head>
-	<body>`
-	htmlFooter = `</body></html>`
 )
 
 var Delimiter = "/"
@@ -124,84 +115,10 @@ func (mbox *Mailbox) workPackageToMessage(c *hal.HalClient, w *hal.WorkPackage) 
 
 	fmt.Printf("-- Create message for Work Package: %s\n", w.Subject())
 
-	flags := []string{}
-	// Build message
-	e := email.NewEmail()
-
-	// Calculate 'Date' for message
-	date := time.Now()
-	if dt := w.GetCreatedAt(); dt != nil {
-		date = *dt
-	}
-	if dt := w.GetUpdatedAt(); dt != nil {
-		date = *dt
-	}
-	e.Headers.Add("Date", date.Format(time.RFC1123Z))
-
-	// From, To, CC
-	from, _ := mbox.user.getCachedAddress(w.GetLink("author"))
-	to, _ := mbox.user.getCachedAddress(w.GetLink("assignee"))
-	cc, _ := mbox.user.getCachedAddress(w.GetLink("responsible"))
-
-	e.From = from
-	if to != "" {
-		e.To = []string{to}
-	}
-	if cc != "" {
-		e.Cc = []string{cc}
-	}
-
-	// Subject
-	subject := w.Subject()
-	// Check for Important marker `!1`
-	if strings.HasSuffix(subject, " !1") {
-		subject = strings.TrimSuffix(subject, " !1")
-		flags = append(flags, imap.FlaggedFlag, "Important")
-	}
-	e.Subject = subject
-
-	// Format Work package text & html parts
-	text := ""
-	if desc := w.Description(); desc != nil {
-		text = desc.Raw
-		e.Text = []byte(text)
-		e.HTML = []byte(htmlHeader + desc.Html + htmlFooter)
-	}
-
-	// Add attachments
-	if attachments := w.GetAttachments(c); attachments != nil {
-		for _, res := range attachments.Items() {
-			atRes, ok := res.(*hal.Attachment)
-			if !ok {
-				log.Printf("Invalid attachment=%+v", res)
-			}
-			reader, err := mbox.user.LoadAttachment(c, atRes)
-			if err != nil {
-				log.Printf("Failed to download attachment: %+v, err=%v", atRes, err)
-				continue
-			}
-			if _, err := e.Attach(reader, atRes.FileName(), atRes.ContentType()); err != nil {
-				log.Printf("Failed to add attachment: %v", err)
-			}
-		}
-	}
-
-	buf, err := e.Bytes()
+	msg, err := mbox.user.GenerateMessage(w)
 	if err != nil {
-		log.Printf("Failed to build message: subject=%s, err=%s", w.Subject(), err)
 		return err
 	}
-	msg := &Message{
-		Date:          date,
-		Flags:         flags,
-		Size:          uint32(len(buf)),
-		WorkPackageID: w.Id(),
-		body:          buf,
-		WordCount:     WordCount(text),
-	}
-
-	// Try loading flags stored in OpenProject
-	mbox.user.loadWorkPackageFlags(msg)
 
 	// Modify mailbox.  Append new message.
 	mbox.Lock()

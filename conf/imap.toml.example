@@ -9,6 +9,10 @@ timeEntryActivity = "Other"
 # reading rate used for reading time estimate
 wordsPerMinute = 200
 
+[openprojects.template]
+# email templates
+files = "conf/basic/*.tpl"
+
 [openprojects.cache]
 db = "data/cache.db"
 nameExpire = 5

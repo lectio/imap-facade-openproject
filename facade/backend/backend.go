@@ -31,6 +31,9 @@ type Backend struct {
 	base           string
 	updateInterval int
 
+	// Email template
+	emailTemplate *EmailTemplate
+
 	users map[string]*User
 
 	updates chan backend.Update
@@ -109,6 +112,10 @@ func (be *Backend) PushUpdate(update backend.Update) {
 	<-wait
 }
 
+func (be *Backend) GenerateMessage(u *User, w *hal.WorkPackage) (*Message, error) {
+	return be.emailTemplate.Generate(u, w)
+}
+
 func (be *Backend) LoadAttachment(hc *hal.HalClient, at *hal.Attachment) (io.Reader, error) {
 	return be.cache.LoadAttachment(hc, at)
 }
@@ -140,6 +147,11 @@ func New(cfg *viper.Viper) *Backend {
 		wordsPerMinute = 200.0
 	}
 
+	tpl, err := NewEmailTemplate(cfg)
+	if err != nil {
+		log.Panicf("Failed to load email templates: %v", err)
+	}
+
 	cache := NewCache(cfg.Sub("cache"))
 
 	log.Println("OpenProject Backend: ", base)
@@ -149,6 +161,7 @@ func New(cfg *viper.Viper) *Backend {
 		updateInterval: cfg.GetInt("updateInterval"),
 		users:          make(map[string]*User),
 		updates:        make(chan backend.Update),
+		emailTemplate:  tpl,
 		cache:          cache,
 	}
 }
